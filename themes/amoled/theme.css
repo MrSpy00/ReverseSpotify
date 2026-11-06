@@ -1,0 +1,15 @@
+/* ReverseSpotify — AMOLED: saf siyah zemin (OLED ekranlarda piksel kapalı = göz ve pil).
+ * Yalnız encore CSS değişkenleri; seçici kural yok (performans bütçesi).
+ * Unlayered bilinçli: @layer encore içindeki orijinal değerleri kademeleri ezerek ezer;
+ * variant setler (accent/negative/...) kendi elemanlarında değer tanımladığı için
+ * miras yoluyla etkilenmez — siyah sadece base sete iner. */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-base: #000000;
+  --background-highlight: #0a0a0a;
+  --background-press: #000000;
+  --background-elevated-base: #0d0d0d;
+  --background-elevated-highlight: #141414;
+  --background-elevated-press: #000000;
+  --decorative-subdued: #141414;
+}

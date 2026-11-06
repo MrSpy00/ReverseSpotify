@@ -4,21 +4,6 @@ import pytest
 
 from reversespotify import cli, config, patch, process, spa
 
-FIXTURE_INDEX = "tests/fixtures/index.html"
-
-
-@pytest.fixture
-def fake_apps(tmp_path, monkeypatch):
-    """Sahte Apps dizini + sahte xpui.spa; data_root izole edilir."""
-    monkeypatch.setenv("REVERSESPOTIFY_HOME", str(tmp_path / "RShome"))
-    monkeypatch.setattr(process, "spotify_running", lambda: False)
-
-    apps = tmp_path / "Apps"
-    apps.mkdir()
-    index = open(FIXTURE_INDEX, "rb").read()
-    spa.write_spa({"index.html": index, "xpui-snapshot.js": b"/*js*/"}, apps / "xpui.spa")
-    return apps
-
 
 def _install(apps, extra=()):
     return cli.main(["install", "--spotify-dir", str(apps), "--yes", *extra])

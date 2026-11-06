@@ -113,6 +113,42 @@ function candidateModules(sources) {
   return out;
 }
 
+// ---- Tema motoru (T5) ----
+
+function applyThemeCss(doc, css) {
+  // Tek style tag (#rs-theme): ikinci çağrıda replace — DOM'a kopya yığmaz.
+  let el = doc.getElementById("rs-theme");
+  if (!el) {
+    el = doc.createElement("style");
+    el.id = "rs-theme";
+    (doc.head || doc.documentElement).appendChild(el);
+  }
+  el.textContent = css;
+}
+
+function themeEngineModule(win, fetchFn) {
+  const f = fetchFn || ((...a) => (win.fetch || fetch)(...a));
+  return {
+    name: "theme-engine",
+    async run() {
+      const api = win.ReverseSpotify;
+      const theme = api && api.settings && api.settings.theme;
+      if (!theme) return;
+      // 404/ager reddetme: kaçak hata kalıcı disable'a yol açmasın (rs:disabled kalıcıdır)
+      let css = null;
+      try {
+        const res = await f("/reverse/themes/" + encodeURIComponent(theme) + "/theme.css");
+        if (res && res.ok) css = await res.text();
+      } catch (_) {}
+      if (css === null) {
+        if (api && api.log) api.log("tema css alınamadı:", theme);
+        return;
+      }
+      api.applyTheme(css);
+    },
+  };
+}
+
 function detectModules(req, api) {
   // rspack: require.cache (.c) yok → fabrika kaynak taraması + require ile şekil doğrulama.
   // require(id) yan etkileri olabilir: aynı id ASLA iki kez denenmez (api._tried).
@@ -194,6 +230,7 @@ function browserBoot() {
     Router: null,
     fallbacks: [],
     settings: { theme: null, plugins: [] },
+    applyTheme: (css) => applyThemeCss(document, css),
     log: (...a) => console.log("[ReverseSpotify]", ...a),
     onReady(cb) {
       if (api._ready) Promise.resolve(api._ready).then(() => cb(api));
@@ -263,7 +300,7 @@ function browserBoot() {
   api._ready.then(() => {
     api.modules = bootModules(
       [
-        { name: "theme-engine", run() {} },
+        { name: "theme-engine", ...themeEngineModule(win) },
         { name: "plugins", run() {} },
         { name: "adblock", run() {} },
         { name: "ui-overhaul", run() {} },
@@ -277,7 +314,14 @@ function browserBoot() {
 // ---- Dışa aktarım / giriş ----
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { bootModules, createDisableRegistry, pickChunkGlobal, candidateModules };
+  module.exports = {
+    bootModules,
+    createDisableRegistry,
+    pickChunkGlobal,
+    candidateModules,
+    applyThemeCss,
+    themeEngineModule,
+  };
 }
 
 if (typeof document !== "undefined") {

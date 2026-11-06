@@ -1,0 +1,7 @@
+{
+  "id": "amoled",
+  "name": "AMOLED Black",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css"
+}

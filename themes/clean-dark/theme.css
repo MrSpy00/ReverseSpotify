@@ -1,0 +1,19 @@
+/* ReverseSpotify — Clean Dark: mevcut dark'a mat derin rötuş.
+ * Yalnız encore CSS değişkenleri; hiçbir seçici/bileşen kuralı yok (performans bütçesi).
+ * Unlayered bilinçli: @layer encore içindeki orijinal değerleri kademeleri ezerek ezer;
+ * variant setler (accent/negative/...) kendi elemanlarında değer tanımladığı için
+ * miras yoluyla etkilenmez — rötuş sadece base sete iner. */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-base: #0e0e10;
+  --background-highlight: #19191b;
+  --background-press: #000000;
+  --background-elevated-base: #1a1a1c;
+  --background-elevated-highlight: #232326;
+  --background-elevated-press: #121214;
+  --background-tinted-base: #ffffff14;
+  --background-tinted-highlight: #ffffff20;
+  --background-tinted-press: #ffffff30;
+  --text-subdued: #a5a5ab;
+  --decorative-subdued: #232326;
+}

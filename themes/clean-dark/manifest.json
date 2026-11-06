@@ -1,0 +1,7 @@
+{
+  "id": "clean-dark",
+  "name": "Clean Dark",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css"
+}
