@@ -52,22 +52,30 @@ def _load_cfg(entries: dict[str, bytes]) -> dict:
     return cfg
 
 
-def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET) -> None:
+def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET, cfg_update=_UNSET) -> None:
     """Tek repack akışı: pristine yakala → enjekte et → config/tema/plugin yaz → marker tazele.
 
     install, themes set ve plugins komutları bu fonksiyonu paylaşır; pristine asla ezilmez.
+    ValueError → yürüteci `_repack_cli` yakalar (temiz hata, asla traceback).
     """
     spa_path = apps / "xpui.spa"
 
-    # pristine: yalnız ilk sefer alınır (pre-repack baytları), asla ezilmez
+    entries = spa.read_spa(spa_path)
+    html = entries["index.html"].decode("utf-8")
+
+    # pristine: yalnız ilk sefer alınır (pre-repack baytları), asla ezilmez;
+    # modlu bayt asla pristine olarak kaydedilemez — aksi halde restore
+    # modlu bayta döner ve vanilla hiçbir yoldan kurtarılamaz
     backup = config.data_root() / "Backup"
     backup.mkdir(parents=True, exist_ok=True)
     pristine = backup / "xpui.spa.pristine"
     if not pristine.exists():
+        if patch.has_loader(html):
+            raise ValueError(
+                "pristine yedek yok ve mevcut spa modlu görünüyor — pristine kaynağı doğrulanamadı"
+            )
         pristine.write_bytes(spa_path.read_bytes())
 
-    entries = spa.read_spa(spa_path)
-    html = entries["index.html"].decode("utf-8")
     entries["index.html"] = patch.inject_loader(html).encode("utf-8")
     entries["reverse-loader.js"] = LOADER_SOURCE.read_bytes()
 
@@ -76,6 +84,8 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET) -> None:
         cfg["theme"] = set_theme
     if set_plugins is not _UNSET:
         cfg["plugins"] = set_plugins
+    if cfg_update is not _UNSET:
+        cfg.update(cfg_update)
     entries["reverse/config.json"] = json.dumps(cfg).encode("utf-8")
 
     # tema CSS'lerini paketle; diskte olmayan eski reverse/themes/* girişlerini at
@@ -112,6 +122,16 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET) -> None:
     )
 
 
+def _repack_cli(apps: Path, **kw) -> bool:
+    """_repack yürüteci: ValueError → temiz hata mesajı (traceback yok)."""
+    try:
+        _repack(apps, **kw)
+        return True
+    except ValueError as exc:
+        print(f"hata: {exc}")
+        return False
+
+
 def cmd_install(args: argparse.Namespace) -> int:
     _ensure_spotify_closed(args.yes)
 
@@ -120,7 +140,8 @@ def cmd_install(args: argparse.Namespace) -> int:
         print(f"hata: {apps / 'xpui.spa'} bulunamadı")
         return 1
 
-    _repack(apps)
+    if not _repack_cli(apps):
+        return 1
     process.start_spotify(apps.parent / "Spotify.exe")
     print("kurulum tamam")
     return cmd_status(args)
@@ -218,7 +239,8 @@ def cmd_themes_set(args: argparse.Namespace) -> int:
     if not (apps / "xpui.spa").exists():
         print(f"hata: {apps / 'xpui.spa'} bulunamadı")
         return 1
-    _repack(apps, set_theme=args.theme_id)
+    if not _repack_cli(apps, set_theme=args.theme_id):
+        return 1
     process.start_spotify(apps.parent / "Spotify.exe")
     print(f"tema: {args.theme_id}")
     return 0
@@ -293,27 +315,35 @@ def cmd_plugins_add(args: argparse.Namespace) -> int:
             "permissions": info["manifest"]["permissions"],
         }
     ]
+    # her ekleme (ilk kur + --force) auto-disable kaydını temizlesin: rs:disabled'ta
+    # eski kırık kayıt varsa plugin kurulur kurulmaz ölü kalırdı
+    entry_name = f"plugin:{pid}"
+    old_reset = cfg.get("resetDisabled")
+    old_reset = [n for n in old_reset if isinstance(n, str)] if isinstance(old_reset, list) else []
+    cfg_update = {"resetDisabled": [n for n in old_reset if n != entry_name] + [entry_name]}
     _ensure_spotify_closed(args.yes)
-    _repack(apps, set_plugins=new_list)
+    if not _repack_cli(apps, set_plugins=new_list, cfg_update=cfg_update):
+        return 1
     process.start_spotify(apps.parent / "Spotify.exe")
     print(f"plugin eklendi: {pid}")
     return 0
 
 
 def _plugins_mutate(args: argparse.Namespace, mutate) -> int:
-    """mutate(cfg) → yeni plugins listesi döndürür; ValueError → hata mesajı + exit 1."""
+    """mutate(cfg) → (yeni plugins listesi, cfg_update dict|None); ValueError → hata + exit 1."""
     apps = config.spotify_apps_dir(args.spotify_dir)
     if not (apps / "xpui.spa").exists():
         print(f"hata: {apps / 'xpui.spa'} bulunamadı")
         return 1
     try:
         cfg = _read_cfg(apps)
-        new_list = mutate(cfg)
+        new_list, cfg_update = mutate(cfg)
     except ValueError as exc:
         print(f"hata: {exc}")
         return 1
     _ensure_spotify_closed(args.yes)
-    _repack(apps, set_plugins=new_list)
+    if not _repack_cli(apps, set_plugins=new_list, cfg_update=cfg_update or {}):
+        return 1
     process.start_spotify(apps.parent / "Spotify.exe")
     return 0
 
@@ -331,7 +361,7 @@ def cmd_plugins_remove(args: argparse.Namespace) -> int:
         out = list(cfg["plugins"])
         out.pop(i)
         print(f"plugin kaldırıldı: {args.id}")
-        return out
+        return out, None
 
     return _plugins_mutate(args, mutate)
 
@@ -342,7 +372,7 @@ def cmd_plugins_disable(args: argparse.Namespace) -> int:
         out = [dict(p) for p in cfg["plugins"]]
         out[i]["enabled"] = False
         print(f"plugin pasif: {args.id}")
-        return out
+        return out, None
 
     return _plugins_mutate(args, mutate)
 
@@ -352,8 +382,13 @@ def cmd_plugins_enable(args: argparse.Namespace) -> int:
         i = _find_pid(cfg, args.id)
         out = [dict(p) for p in cfg["plugins"]]
         out[i]["enabled"] = True
+        # enable = auto-disable kaydını config'e yaz: loader boot'ta rs:disabled'tan pop eder
+        entry_name = f"plugin:{args.id}"
+        old = cfg.get("resetDisabled")
+        old = [n for n in old if isinstance(n, str)] if isinstance(old, list) else []
+        cfg_update = {"resetDisabled": [n for n in old if n != entry_name] + [entry_name]}
         print(f"plugin aktif: {args.id}")
-        return out
+        return out, cfg_update
 
     return _plugins_mutate(args, mutate)
 

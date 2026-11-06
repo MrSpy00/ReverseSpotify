@@ -1,10 +1,12 @@
-"""CDP smoke yardımcısı (T5-T9): Spotify'ı debug bayrağıyla başlat, JS değerlendir, istersen ekran görüntüsü al.
+﻿"""CDP smoke yardÄ±mcÄ±sÄ± (T5-T9): Spotify'Ä± debug bayraÄŸÄ±yla baÅŸlat, JS deÄŸerlendir, istersen ekran gÃ¶rÃ¼ntÃ¼sÃ¼ al.
 
-Kullanım: python tools/cdp_smoke.py "<js expr>" [screenshot.png]
+KullanÄ±m: python tools/cdp_smoke.py "<js expr>" [screenshot.png]
 """
 
 import base64
 import json
+import os
+import pathlib
 import subprocess
 import sys
 import time
@@ -12,7 +14,7 @@ import urllib.request
 
 import websocket
 
-SPOTIFY = r"C:\Users\mrSpy\AppData\Roaming\Spotify\Spotify.exe"
+SPOTIFY = str(pathlib.Path(os.environ["APPDATA"]) / "Spotify" / "Spotify.exe")
 
 
 def kill():
@@ -32,7 +34,7 @@ def launch():
                     return t["webSocketDebuggerUrl"]
         except Exception:
             continue
-    raise SystemExit("CDP sayfası bulunamadı")
+    raise SystemExit("CDP sayfasÄ± bulunamadÄ±")
 
 
 def main():
@@ -52,13 +54,13 @@ def main():
             if r.get("id") == mid:
                 return r
 
-    # boot bekle: dataset.rs=1 + modüller
+    # boot bekle: dataset.rs=1 + modÃ¼ller
     for _ in range(40):
         r = call("Runtime.evaluate", {"expression": "document.documentElement.dataset.rs||''", "returnByValue": True})
         if r.get("result", {}).get("result", {}).get("value") == "1":
             break
         time.sleep(1)
-    time.sleep(3)  # theme-engine run (config+css fetch) için
+    time.sleep(3)  # theme-engine run (config+css fetch) iÃ§in
 
     r = call(
         "Runtime.evaluate",
@@ -72,7 +74,7 @@ def main():
         res = r.get("result", {})
         data = res.get("data") or (res.get("result") or {}).get("data")
         if data is None:
-            raise SystemExit(f"screenshot başarısız: {json.dumps(r)[:300]}")
+            raise SystemExit(f"screenshot baÅŸarÄ±sÄ±z: {json.dumps(r)[:300]}")
         open(shot, "wb").write(base64.b64decode(data))
         print(f"screenshot: {shot}")
     ws.close()

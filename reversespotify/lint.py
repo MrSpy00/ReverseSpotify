@@ -13,7 +13,8 @@ yakalanmaz — upgrade: sabit-propagasyon/lint için AST (esbuild/biome) eklenir
 import re
 
 # ilk argüman iç içe parantez içerebilir (arrow + çağrılar): virgüle kadarki her şey
-_INTERVAL_RE = re.compile(r"setInterval\s*\(.*?,\s*(\d+)\s*\)")
+# DOTALL: multi-line arrow gövdeleri de yakalanır (review Important #5)
+_INTERVAL_RE = re.compile(r"setInterval\s*\(.*?,\s*(\d+)\s*\)", re.DOTALL)
 _THROTTLE_HINT_RE = re.compile(r"debounce|throttle|requestAnimationFrame|\brAF\b", re.IGNORECASE)
 _BACKDROP_RE = re.compile(r"backdrop-?filter", re.IGNORECASE)
 _QUERY_RE = re.compile(r"querySelectorAll")

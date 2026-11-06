@@ -1,9 +1,12 @@
-"""Kalite seçenek filtresi ve gate bağlamını çıkar."""
+﻿"""Kalite seÃ§enek filtresi ve gate baÄŸlamÄ±nÄ± Ã§Ä±kar."""
 
+import os
 import re
+import sys
 from pathlib import Path
 
-SRC = Path(r"C:\Users\mrSpy\AppData\Local\Temp\opencode\xpui_probe\xpui-routes-desktop-settings.js")
+_ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(os.environ.get("APPDATA", "")) / "Local" / "Temp" / "opencode" / "xpui_probe"
+SRC = _ROOT / "xpui-routes-desktop-settings.js"
 s = SRC.read_text(encoding="utf-8", errors="ignore")
 
 for pat in (r"filter\(\(\{quality", r"VERY_HIGH", r"LOSSLESS", r"PETREL"):

@@ -39,7 +39,7 @@ Hedef: Spotify Desktop 1.3.8.620 (Windows). Komutlar repo kökünden:
 | --- | --- |
 | `rs:ui:upsell` = `0` | Upsell/indir banner gizlemesini kapatır |
 | `rs:ui:dsa` = `0` | `home-dsa-message-banner` gizlemesini kapatır |
-| `rs:disabled` | JSON array — çöken plugin'ler otomatik buraya düşer (`plugin:<id>`); kaldırmak için `plugins enable <id>` |
+| `rs:disabled` | JSON array — çöken plugin/çekirdek modüller otomatik buraya düşer (`plugin:<id>`). Çöken plugin: `plugins enable <id>` (config'e `resetDisabled` yazar, boot'ta rs:disabled'tan temizlenir). Çekirdek modül veya genel temizlik: konsoldan `localStorage.removeItem('rs:disabled')` |
 | `rs:error` | Son plugin hata kaydı (debug) |
 
 ## Performans bütçesi (plugin kuralları — lint hard-fail, `--force` bile geçemez)

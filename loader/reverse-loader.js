@@ -58,7 +58,23 @@ function createDisableRegistry(storage) {
         storage.setItem(KEY, JSON.stringify(Array.from(s)));
       } catch (_) {}
     },
+    remove(name) {
+      try {
+        const s = read();
+        s.delete(name);
+        storage.setItem(KEY, JSON.stringify(Array.from(s)));
+      } catch (_) {}
+    },
   };
+}
+
+// config.resetDisabled: CLI enable/add, rs:disabled'taki kırık kaydı config'e yazar;
+// boot bunları temizler — "asla sessiz bozulma yok" (review Important)
+function applyResetDisabled(registry, settings) {
+  if (!registry || !registry.remove || !settings || !Array.isArray(settings.resetDisabled)) return;
+  for (const name of settings.resetDisabled) {
+    if (typeof name === "string") registry.remove(name);
+  }
 }
 
 // ---- Tarayıcı yolu (CEF/xpui) ----
@@ -449,6 +465,7 @@ function browserBoot() {
     } catch (e) {
       api.log("config okunamadı (varsayılanla devam)", e);
     }
+    applyResetDisabled(registry, api.settings);
 
     const req = await waitForRequire(win, 15000);
     if (!req) {
@@ -632,6 +649,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     bootModules,
     createDisableRegistry,
+    applyResetDisabled,
     pickChunkGlobal,
     candidateModules,
     applyThemeCss,

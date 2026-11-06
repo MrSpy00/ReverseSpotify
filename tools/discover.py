@@ -1,9 +1,11 @@
-"""T7 keşif: xpui chunk'larından ad/upsell testid'leri ve kalite-gate terimlerini topla."""
+﻿"""T7 keÅŸif: xpui chunk'larÄ±ndan ad/upsell testid'leri ve kalite-gate terimlerini topla."""
 
+import os
 import re
+import sys
 from pathlib import Path
 
-ROOT = Path(r"C:\Users\mrSpy\AppData\Local\Temp\opencode\xpui_probe")
+ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(os.environ.get("APPDATA", "")) / "Local" / "Temp" / "opencode" / "xpui_probe"
 
 TESTID_RE = re.compile(r'data-testid["\']?\s*[:=]\s*["\']([^"\']+)["\']')
 Q_RE = re.compile(r".{60}(?:very_high|veryHigh|bitrate|audio-quality|audioQuality|entitlement).{60}", re.I)
