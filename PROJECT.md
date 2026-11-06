@@ -10,7 +10,7 @@
 | GitHub | https://github.com/MrSpy00/ReverseSpotify |
 | Hedef | Spotify Desktop **1.3.8.620** (`%APPDATA%\Spotify`) — Windows x64 |
 | Stack | Python 3.14 (CLI/yama/izleyici) + saf JS loader (runtime) |
-| Test | `python -m pytest -q` (56) · `node --test "tests/js/*.test.mjs"` (30) |
+| Test | `python -m pytest -q` (56) · `node --test "tests/js/*.test.mjs"` (38) |
 
 ## Ne yapar
 
@@ -63,8 +63,12 @@ docs/                    specs/ plans/ xpui-findings.md usage.md
   entitlement/`maxSupportedQuality`/option üretimine dokunulmaz (test ile kilitli).
 - **Ad-block:** 39 gerçek `data-testid` CSS hide katmanı; ses-hook yok → dürüst
   `mode=ui-only` (docs/xpui-findings.md §2).
-- **Kontrol paneli:** `panel` modülü (6/6 boot) — gear butonu + `Ctrl+Shift+,`;
-  tema/plugin/adblock/UI grupları/kalite aç-kapa. Öncelik: `rs:theme` (localStorage)
+- **Kontrol paneli (v2):** `panel` modülü (6/6 boot) — **üst bardaki dişli ikonu**
+  (profil avatarının solu, Spotify'ın native buton sınıfları kopyalı; üst bar
+  yoksa sağ-alt fallback, 400ms×10 + 3sn sweep ile taşınır) + `Ctrl+Shift+,` aç /
+  `ESC` kapat; tema kartları (renk swatch + check), yeşil switch'ler, 11px uppercase
+  bölüm başlıkları, pill butonlar, responsive (520/360px kırılım), SVG ikon,
+  `prefers-reduced-motion` destekli. Öncelik: `rs:theme` (localStorage)
   > CLI config; UI grupları `rs:ui:*` anında etkili, plugin aç-kapa bir sonraki
   açılışta geçerli. İkonlar SVG (emoji yasak).
 
@@ -90,7 +94,7 @@ python -m reversespotify watch --install-task  # ReverseSpotifyHeal (logon+günl
 
 ```powershell
 python -m pytest -q                                        # 56 passed
-node --test "tests/js/*.test.mjs"                          # 30 passed
+node --test "tests/js/*.test.mjs"                          # 38 passed
 python tools/cdp_smoke.py "(async()=>JSON.stringify(window.ReverseSpotify.modules))()"
 ```
 

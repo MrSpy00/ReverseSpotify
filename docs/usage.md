@@ -18,11 +18,13 @@ Hedef: Spotify Desktop 1.3.8.620 (Windows). Komutlar repo kökünden:
 
 ## Uygulama içi kontrol paneli (terminal gerekmez)
 
-Spotify açıkken **sağ alttaki dişli butona** veya **Ctrl+Shift+,** tuşlarına bas:
+Spotify açıkken **üst bardaki dişli ikonuna** (profil avatarının solunda, Spotify'ın kendi
+buton stiliyle) veya **Ctrl+Shift+,** tuşlarına bas; **ESC** ile kapat:
 
-- **Tema** — kurulu temalar arasında anında geçiş (`Seç`), "Kapalı (vanilla görünüm)" ile
-  temayı kapatma. Panel seçimi `rs:theme` localStorage anahtarında tutulur; "Varsayılan (config)"
-  ile CLI `themes set` kararına dönülür.
+- **Tema** — kurulu temalar arasında kartlarla anında geçiş (renk önizlemeli, seçili kart
+  yeşil çerçeve + check), "Kapalı (vanilla görünüm)" ile temayı kapatma. Panel seçimi
+  `rs:theme` localStorage anahtarında tutulur; "Varsayılan (config)" ile CLI `themes set`
+  kararına dönülür.
 - **Pluginler** — aktif plugin'i aç/kapat (`rs:disabled`, bir sonraki açılışta geçerli;
   CLI-pasif olanlar panel'den açılmaz).
 - **Reklam ve UI temizliği** — adblock ve upsell/dsa gruplarını anında aç/kapat
@@ -41,7 +43,7 @@ Spotify açıkken **sağ alttaki dişli butona** veya **Ctrl+Shift+,** tuşları
 | `install --yes` → `status` | install=0, status=**0** |
 | `themes set amoled --yes` → `status` | 0, status=**0**, `tema: amoled` |
 | `plugins add key-highlight --yes` → `status` | 0, status=**0**, `plugin: ... (aktif)` |
-| CDP gözlem | modules 6/6 failed[], `adblock ui-only (39 seçik)`, badge `.rs-keyhl`, panel `#rs-panel-btn` → `#rs-panel` |
+| CDP gözlem | modules 6/6 failed[], `adblock ui-only (39 seçik)`, badge `.rs-keyhl`, panel `#rs-panel-btn` üst barda (user-widget-link solu) → `#rs-panel`, ESC ile kapanır |
 | `themes set clean-dark --yes` | 0 |
 | `watch --once` (sağlıklı kurulum) | **`watch: ok`** (0) |
 | spa hash bilinçli değişimi → `watch --once` | **`watch: healed`** → status=0 |

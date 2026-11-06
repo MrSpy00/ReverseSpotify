@@ -701,91 +701,319 @@ function makeQualityModule(win, api) {
 
 // ---- Kontrol paneli (in-app UI) ----
 
+// ---- Panel veri + montaj yardımcıları (pure — panel-ui.test.mjs ile kilitli) ----
+
+const THEME_SWATCHES = {
+  "clean-dark": ["#0e0e10", "#1a1a1c"],
+  amoled: ["#000000", "#0d0d0d"],
+};
+
+function swatchFor(id) {
+  const s = THEME_SWATCHES[String(id == null ? "" : id)];
+  return s ? s.slice() : ["#121212", "#1f1f1f"];
+}
+
+const UI_LABELS = {
+  upsell: "İndirme ve upgrade bannerları",
+  dsa: "Ana sayfa duyuru bandı",
+};
+
+function groupLabel(g) {
+  return UI_LABELS[g] || g;
+}
+
+// Üst bar montaj hedefi: sağ klaster, profil avatarının hemen solu.
+function topbarSlot(doc) {
+  const refs = [
+    '[data-testid="user-widget-link"]',
+    '[data-testid="friend-activity-button"]',
+    '[data-testid="whats-new-feed-button"]',
+  ];
+  for (const sel of refs) {
+    const el = doc.querySelector(sel);
+    if (el && el.parentElement) return { parent: el.parentElement, before: el };
+  }
+  return null;
+}
+
 const PANEL_CSS = [
+  // -- buton: fallback (sag alt) + ust bar varyanti --
   "#rs-panel-btn{position:fixed;right:14px;bottom:110px;z-index:99999;width:34px;height:34px;",
-  "border-radius:50%;border:1px solid #3e3e3e;background:#181818;color:#b3b3b3;cursor:pointer;",
-  "display:flex;align-items:center;justify-content:center;opacity:.55;transition:opacity .15s}",
-  "#rs-panel-btn:hover{opacity:1}",
-  "#rs-panel{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;",
-  "align-items:center;justify-content:center}",
-  "#rs-panel-card{min-width:min(440px,92vw);max-width:min(440px,92vw);max-height:82vh;overflow:auto;",
-  "background:#121212;border:1px solid #2a2a2a;border-radius:10px;color:#eaeaea;",
-  "font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;padding:16px 16px 14px;position:relative}",
-  "#rs-panel-card h2{margin:0 0 10px;font-size:16px;font-weight:700}",
-  "#rs-panel-card h3{margin:14px 0 6px;font-size:11px;font-weight:600;letter-spacing:.06em;",
-  "text-transform:uppercase;color:#a7a7a7}",
-  "#rs-panel-card .rs-row{display:flex;gap:8px;align-items:center;padding:7px 8px;margin-bottom:6px;",
-  "border:1px solid #262626;border-radius:8px;background:#181818}",
-  "#rs-panel-card .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-  "#rs-panel-card .st{color:#8f8f8f;font-size:11px;flex:none}",
-  "#rs-panel-card .rs-btn{border:1px solid #3e3e3e;background:#232323;color:#eaeaea;border-radius:6px;",
-  "padding:4px 10px;font-size:12px;cursor:pointer;flex:none}",
-  "#rs-panel-card .rs-btn:hover{background:#2e2e2e}",
-  "#rs-panel-card .rs-btn[disabled]{opacity:.45;cursor:default}",
-  "#rs-panel-card .rs-note{color:#7a7a7a;font-size:11px;margin:4px 0}",
-  "#rs-panel-card .rs-close{position:absolute;top:10px;right:12px;border:0;background:none;",
-  "color:#a7a7a7;font-size:12px;cursor:pointer}",
-  "#rs-panel-card .rs-close:hover{color:#fff}",
+  "border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0;",
+  "background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.85);",
+  "cursor:pointer;transition:background .12s ease,color .12s ease,transform .12s ease}",
+  "#rs-panel-btn:hover{background:rgba(0,0,0,.8);color:#fff;transform:scale(1.05)}",
+  "#rs-panel-btn.rs-in-topbar{position:static;width:32px;height:32px;flex:none;background:transparent;",
+  "border:0;border-radius:50%;color:rgba(255,255,255,.7)}",
+  "#rs-panel-btn.rs-in-topbar:hover{background:rgba(255,255,255,.1);color:#fff;transform:none}",
+  // -- overlay + kart --
+  "#rs-panel{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;",
+  "padding:24px 16px;background:rgba(0,0,0,.7);font:400 13px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;",
+  "animation:rs-fade .14s ease-out}",
+  "#rs-panel-card{position:relative;display:flex;flex-direction:column;width:min(560px,100%);",
+  "max-height:min(660px,86vh);background:#121212;color:#fff;border:1px solid rgba(255,255,255,.08);",
+  "border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.6);overflow:hidden;",
+  "animation:rs-pop .16s cubic-bezier(.2,.8,.3,1)}",
+  "@keyframes rs-fade{from{opacity:0}}",
+  "@keyframes rs-pop{from{opacity:0;transform:translateY(8px) scale(.97)}}",
+  "@media (prefers-reduced-motion:reduce){#rs-panel,#rs-panel-card{animation:none}}",
+  // -- baslik --
+  "#rs-panel-card .rs-head{display:flex;align-items:center;gap:10px;padding:14px 16px;flex:none;",
+  "border-bottom:1px solid rgba(255,255,255,.07)}",
+  "#rs-panel-card .rs-mark{flex:none;width:26px;height:26px;border-radius:7px;background:#1ed760;",
+  "color:#000;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}",
+  "#rs-panel-card .rs-hgrp{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0}",
+  "#rs-panel-card .rs-ttl{font-weight:700;font-size:14px;letter-spacing:.1px}",
+  "#rs-panel-card .rs-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#a7a7a7;",
+  "border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:2px 9px}",
+  "#rs-panel-card .rs-pill i{width:6px;height:6px;border-radius:50%;background:#1ed760}",
+  "#rs-panel-card .rs-pill.warn i{background:#f59e0b}",
+  "#rs-panel-card .rs-x{margin-left:auto;flex:none;width:32px;height:32px;border:0;border-radius:50%;",
+  "background:transparent;color:#a7a7a7;cursor:pointer;display:flex;align-items:center;justify-content:center}",
+  "#rs-panel-card .rs-x:hover{background:rgba(255,255,255,.08);color:#fff}",
+  // -- govde + kaydirma --
+  "#rs-panel-card .rs-body{flex:1;min-height:0;overflow-y:auto;padding:2px 16px 16px}",
+  "#rs-panel-card .rs-body::-webkit-scrollbar{width:8px}",
+  "#rs-panel-card .rs-body::-webkit-scrollbar-thumb{background:#4d4d4d;border-radius:4px}",
+  "#rs-panel-card .rs-body::-webkit-scrollbar-track{background:transparent}",
+  // -- bolumler --
+  "#rs-panel-card .rs-sec{margin-top:16px}",
+  "#rs-panel-card .rs-sec>h3{display:flex;align-items:center;gap:7px;margin:0 0 8px;font-size:11px;",
+  "font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#a7a7a7}",
+  "#rs-panel-card .rs-sec>h3 svg{width:14px;height:14px;opacity:.8;flex:none}",
+  "#rs-panel-card .rs-row{display:flex;align-items:center;gap:10px;padding:9px 10px;min-height:44px;",
+  "margin-bottom:6px;background:#181818;border:1px solid rgba(255,255,255,.06);border-radius:8px;",
+  "transition:background .1s ease}",
+  "#rs-panel-card .rs-row:hover{background:#1e1e1e}",
+  "#rs-panel-card .rs-col{flex:1;min-width:0}",
+  "#rs-panel-card .rs-nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;",
+  "font-weight:500;color:#eaeaea}",
+  "#rs-panel-card .rs-sub{display:block;margin-top:2px;font-size:11px;color:#8f8f8f;overflow:hidden;",
+  "text-overflow:ellipsis;white-space:nowrap}",
+  "#rs-panel-card .rs-kbds{display:flex;gap:6px;align-items:center;flex:none;flex-wrap:wrap}",
+  "#rs-panel-card .rs-kbd{display:inline-block;font:600 11px/1 ui-monospace,Consolas,monospace;",
+  "background:#232323;border:1px solid rgba(255,255,255,.16);border-bottom-width:2px;border-radius:5px;",
+  "padding:3px 6px;color:#eaeaea}",
+  // -- anahtar (Spotify tarzi switch) --
+  "#rs-panel-card .rs-sw{position:relative;flex:none;width:36px;height:20px;padding:0;border:0;",
+  "border-radius:999px;background:#535353;cursor:pointer;transition:background .15s ease}",
+  "#rs-panel-card .rs-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;",
+  "border-radius:50%;background:#fff;transition:transform .15s ease}",
+  "#rs-panel-card .rs-sw[aria-checked=true]{background:#1ed760}",
+  "#rs-panel-card .rs-sw[aria-checked=true]::after{transform:translateX(16px)}",
+  "#rs-panel-card .rs-sw[disabled]{opacity:.45;cursor:not-allowed}",
+  // -- butonlar (pill) --
+  "#rs-panel-card .rs-btn{flex:none;border:0;border-radius:999px;padding:7px 16px;font-size:12px;",
+  "font-weight:700;background:#fff;color:#000;cursor:pointer;",
+  "transition:transform .1s ease,background .1s ease}",
+  "#rs-panel-card .rs-btn:hover{background:#f0f0f0;transform:scale(1.04)}",
+  "#rs-panel-card .rs-btn:active{transform:scale(.99)}",
+  "#rs-panel-card .rs-btn.sec{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.3);",
+  "font-weight:500;padding:6px 14px}",
+  "#rs-panel-card .rs-btn.sec:hover{background:rgba(255,255,255,.1);border-color:#fff;transform:none}",
+  "#rs-panel-card .rs-btn[disabled]{opacity:.4;pointer-events:none}",
+  // -- tema kartlari --
+  "#rs-panel-card .rs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}",
+  "#rs-panel-card .rs-tcard{border:2px solid transparent;padding:8px;border-radius:10px;background:#181818;",
+  "color:#eaeaea;font:inherit;text-align:left;cursor:pointer;",
+  "transition:border-color .12s ease,background .12s ease}",
+  "#rs-panel-card .rs-tcard:hover{background:#1e1e1e;border-color:rgba(255,255,255,.18)}",
+  "#rs-panel-card .rs-tcard[aria-pressed=true]{border-color:#1ed760}",
+  "#rs-panel-card .rs-prev{position:relative;height:52px;border-radius:6px;overflow:hidden;",
+  "border:1px solid rgba(255,255,255,.06);margin-bottom:7px}",
+  "#rs-panel-card .rs-prev .bs{position:absolute;inset:0}",
+  "#rs-panel-card .rs-prev .ac{position:absolute;left:8px;right:8px;bottom:8px;height:16px;border-radius:4px}",
+  "#rs-panel-card .rs-lbl{display:flex;align-items:center;justify-content:space-between;gap:6px;",
+  "font-size:12px;font-weight:600}",
+  "#rs-panel-card .rs-lbl .ok{display:none;color:#1ed760}",
+  "#rs-panel-card .rs-tcard[aria-pressed=true] .rs-lbl .ok{display:block}",
+  // -- not + alt bilgi --
+  "#rs-panel-card .rs-note{margin:4px 0 0;color:#8f8f8f;font-size:11.5px}",
+  "#rs-panel-card .rs-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;",
+  "flex-wrap:wrap;margin-top:14px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);",
+  "color:#6a6a6a;font-size:11px}",
+  // -- odak + kucuk ekranlar --
+  "#rs-panel-btn:focus-visible,.rs-panel-card .rs-sw:focus-visible,.rs-panel-card .rs-btn:focus-visible,",
+  ".rs-panel-card .rs-x:focus-visible,.rs-panel-card .rs-tcard:focus-visible{outline:2px solid #1ed760;",
+  "outline-offset:2px}",
+  "@media (max-width:520px){#rs-panel{padding:12px 8px}#rs-panel-card .rs-head{padding:12px}",
+  "#rs-panel-card .rs-body{padding:2px 12px 14px}}",
+  "@media (max-width:360px){#rs-panel-card .rs-grid{grid-template-columns:1fr}}",
 ].join("");
 
 function makePanelModule(win, api, registry) {
   const doc = win.document;
-  // Profesyonel SVG dişli (emoji yasak — AGENTS.md ikon standardı)
+  // Profesyonel SVG ikonlar (emoji yasak — AGENTS.md ikon standardı)
   const GEAR =
-    '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
-    'stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' +
     '<circle cx="12" cy="12" r="3.4"/>' +
     '<path d="M12 3.2v2.6M12 18.2v2.6M3.2 12h2.6M18.2 12h2.6M5.7 5.7l1.9 1.9' +
     'M16.4 16.4l1.9 1.9M18.3 5.7l-1.9 1.9M7.6 16.4l-1.9 1.9"/></svg>';
+  const SV = 'viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.4" aria-hidden="true"';
+  const ICO = {
+    close:
+      '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.6" stroke-linecap="round" aria-hidden="true">' +
+      '<path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>',
+    check:
+      '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M3 8.5l3.4 3.4L13 5.2"/></svg>',
+    palette:
+      '<svg ' + SV + ' stroke-linecap="round"><circle cx="8" cy="8" r="6.1"/>' +
+      '<circle cx="5.7" cy="6.6" r=".95" fill="currentColor" stroke="none"/>' +
+      '<circle cx="10.3" cy="6.6" r=".95" fill="currentColor" stroke="none"/>' +
+      '<circle cx="8" cy="10.4" r=".95" fill="currentColor" stroke="none"/></svg>',
+    apps:
+      '<svg ' + SV + '><rect x="2.4" y="2.4" width="5" height="5" rx="1.3"/>' +
+      '<rect x="8.6" y="2.4" width="5" height="5" rx="1.3"/>' +
+      '<rect x="2.4" y="8.6" width="5" height="5" rx="1.3"/>' +
+      '<rect x="8.6" y="8.6" width="5" height="5" rx="1.3"/></svg>',
+    shield:
+      '<svg ' + SV + ' stroke-linejoin="round"><path d="M8 1.9l5 1.9v3.9c0 3.1-2.1 5.2-5 6.3' +
+      '-2.9-1.1-5-3.2-5-6.3V3.8L8 1.9z"/><path d="M5.4 5.4l5.2 5.2" stroke-linecap="round"/></svg>',
+    wave:
+      '<svg ' + SV + ' stroke-linecap="round"><path d="M2.6 8h1.3M5.7 4.9v6.2M8.3 6.4v3.2' +
+      'M10.9 5.3v5.4M13.4 7.3v1.4"/></svg>',
+    info:
+      '<svg ' + SV + ' stroke-linecap="round"><circle cx="8" cy="8" r="6.1"/>' +
+      '<path d="M8 7.3v3.6M8 5.1v.4"/></svg>',
+  };
 
   function closePanel() {
     const el = doc.getElementById("rs-panel");
     if (el) el.remove();
+    const btn = doc.getElementById("rs-panel-btn");
+    if (btn && btn.isConnected) {
+      try {
+        btn.focus();
+      } catch (_) {}
+    }
   }
-  function section(t) {
-    const el = doc.createElement("h3");
-    el.textContent = t;
-    return el;
+
+  function section(t, ico) {
+    const sec = doc.createElement("div");
+    sec.className = "rs-sec";
+    const h = doc.createElement("h3");
+    h.innerHTML = ico || "";
+    const sp = doc.createElement("span");
+    sp.textContent = t;
+    h.appendChild(sp);
+    sec.appendChild(h);
+    return sec;
   }
-  function row(name, state, btnText, onClick, disabled) {
+
+  function row(name, sub, tail) {
     const r = doc.createElement("div");
     r.className = "rs-row";
+    const col = doc.createElement("div");
+    col.className = "rs-col";
     const nm = doc.createElement("span");
-    nm.className = "nm";
+    nm.className = "rs-nm";
     nm.textContent = name;
-    const st = doc.createElement("span");
-    st.className = "st";
-    st.textContent = state;
-    const b = doc.createElement("button");
-    b.className = "rs-btn";
-    b.textContent = btnText;
-    if (disabled) b.disabled = true;
-    else if (onClick) b.addEventListener("click", onClick);
-    r.append(nm, st, b);
+    col.appendChild(nm);
+    if (sub) {
+      const s = doc.createElement("span");
+      s.className = "rs-sub";
+      s.textContent = sub;
+      col.appendChild(s);
+    }
+    r.appendChild(col);
+    if (tail) r.appendChild(tail);
     return r;
   }
+
+  function pillBtn(text, onClick, sec) {
+    const b = doc.createElement("button");
+    b.className = "rs-btn" + (sec ? " sec" : "");
+    b.type = "button";
+    b.textContent = text;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function sw(on, onToggle, disabled) {
+    const b = doc.createElement("button");
+    b.className = "rs-sw";
+    b.type = "button";
+    b.setAttribute("role", "switch");
+    b.setAttribute("aria-checked", on ? "true" : "false");
+    if (disabled) b.disabled = true;
+    else if (onToggle) b.addEventListener("click", onToggle);
+    return b;
+  }
+
   function note(t) {
-    const el = doc.createElement("div");
-    el.className = "rs-note";
-    el.textContent = t;
-    return el;
+    const p = doc.createElement("p");
+    p.className = "rs-note";
+    p.textContent = t;
+    return p;
+  }
+
+  function themeCard(id, label, selected, onClick) {
+    const c = doc.createElement("button");
+    c.className = "rs-tcard";
+    c.type = "button";
+    c.setAttribute("aria-pressed", selected ? "true" : "false");
+    const colors = swatchFor(id);
+    const prev = doc.createElement("div");
+    prev.className = "rs-prev";
+    const bs = doc.createElement("div");
+    bs.className = "bs";
+    bs.style.background = colors[0];
+    const ac = doc.createElement("div");
+    ac.className = "ac";
+    ac.style.background = colors[1];
+    prev.append(bs, ac);
+    const lbl = doc.createElement("div");
+    lbl.className = "rs-lbl";
+    const t = doc.createElement("span");
+    t.textContent = label;
+    const ok = doc.createElement("span");
+    ok.className = "ok";
+    ok.innerHTML = ICO.check;
+    lbl.append(t, ok);
+    c.append(prev, lbl);
+    c.addEventListener("click", onClick);
+    return c;
   }
 
   function fill(card) {
     card.innerHTML = "";
-    const h = doc.createElement("h2");
-    h.textContent = "ReverseSpotify";
-    const close = doc.createElement("button");
-    close.className = "rs-close";
-    close.textContent = "Kapat";
-    close.addEventListener("click", closePanel);
-    card.append(h, close);
-    card.appendChild(
-      note("Panel seçimleri localStorage'da saklanır; CLI config'i sonraki açılışta esas alınır.")
-    );
+    // ---- Başlık ----
+    const head = doc.createElement("div");
+    head.className = "rs-head";
+    const mark = doc.createElement("div");
+    mark.className = "rs-mark";
+    mark.textContent = "R";
+    const hgrp = doc.createElement("div");
+    hgrp.className = "rs-hgrp";
+    const ttl = doc.createElement("div");
+    ttl.className = "rs-ttl";
+    ttl.textContent = "ReverseSpotify";
+    const failed = (api.modules && api.modules.failed) || [];
+    const pill = doc.createElement("span");
+    pill.className = "rs-pill" + (failed.length ? " warn" : "");
+    if (failed.length) pill.title = "Sorunlu modüller: " + failed.join(", ");
+    const dot = doc.createElement("i");
+    const ptxt = doc.createElement("span");
+    ptxt.textContent = failed.length ? "kısmi" : "aktif";
+    pill.append(dot, ptxt);
+    hgrp.append(ttl, pill);
+    const x = doc.createElement("button");
+    x.className = "rs-x";
+    x.type = "button";
+    x.setAttribute("aria-label", "Paneli kapat");
+    x.innerHTML = ICO.close;
+    x.addEventListener("click", closePanel);
+    head.append(mark, hgrp, x);
+    const body = doc.createElement("div");
+    body.className = "rs-body";
 
     // ---- Tema ----
-    card.appendChild(section("Tema"));
+    const s1 = section("Tema", ICO.palette);
     let override = null;
     try {
       override = win.localStorage.getItem("rs:theme");
@@ -793,80 +1021,97 @@ function makePanelModule(win, api, registry) {
     const cur = resolveTheme(win, api.settings);
     const cfgTheme = (api.settings && api.settings.theme) || null;
     if (override !== null && cfgTheme) {
-      card.appendChild(
-        row("Varsayılan (config): " + cfgTheme, cur === cfgTheme ? "seçili" : "", "Seç", async () => {
-          await api.setTheme(null);
-          fill(card);
-        })
+      s1.appendChild(
+        row(
+          "Panel override: " + override,
+          "Config: " + cfgTheme + " · seçili: " + (cur || "kapalı"),
+          pillBtn("Varsayılan", async () => {
+            await api.setTheme(null);
+            fill(card);
+          }, true)
+        )
       );
     }
     const themes =
       api.settings && Array.isArray(api.settings.themes) && api.settings.themes.length
-        ? api.settings.themes
+        ? api.settings.themes.slice()
         : cfgTheme
           ? [cfgTheme]
           : [];
+    const grid = doc.createElement("div");
+    grid.className = "rs-grid";
+    grid.appendChild(
+      themeCard("", "Kapalı (vanilla)", cur === null, async () => {
+        await api.setTheme("");
+        fill(card);
+      })
+    );
     for (const t of themes) {
-      card.appendChild(
-        row(t, cur === t ? "seçili" : "", "Seç", async () => {
+      grid.appendChild(
+        themeCard(t, t, cur === t, async () => {
           await api.setTheme(t);
           fill(card);
         })
       );
     }
-    card.appendChild(
-      row("Kapalı (vanilla görünüm)", cur === null ? "seçili" : "", "Seç", async () => {
-        await api.setTheme("");
-        fill(card);
-      })
-    );
+    s1.appendChild(grid);
+    body.appendChild(s1);
 
     // ---- Pluginler ----
-    card.appendChild(section("Pluginler"));
+    const s2 = section("Pluginler", ICO.apps);
     const plugs = (api.settings && api.settings.plugins) || [];
-    if (!plugs.length) card.appendChild(note("Kurulu plugin yok (CLI: plugins add <id>)."));
+    if (!plugs.length) s2.appendChild(note("Kurulu plugin yok — CLI: plugins add <id>"));
     for (const p of plugs) {
       if (!p || typeof p.id !== "string") continue;
-      const state = pluginRuntimeState(p, registry);
-      if (state === "cli-pasif") {
-        card.appendChild(row(p.id, "CLI pasif", "CLI ile açın", null, true));
-      } else if (state === "aktif") {
-        card.appendChild(
-          row(p.id, "açık", "Kapat", () => {
+      const st = pluginRuntimeState(p, registry);
+      const meta = [
+        p.perfClass,
+        Array.isArray(p.permissions) && p.permissions.length ? p.permissions.join(", ") : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      if (st === "cli-pasif") {
+        const t = sw(false, null, true);
+        t.title = "CLI ile pasif — plugins enable <id>";
+        s2.appendChild(row(p.id, (meta ? meta + " · " : "") + "CLI pasif", t));
+      } else if (st === "aktif") {
+        s2.appendChild(
+          row(p.id, (meta ? meta + " · " : "") + "açık", sw(true, () => {
             registry.disable("plugin:" + p.id);
             fill(card);
-          })
+          }))
         );
       } else {
-        card.appendChild(
-          row(p.id, "kapalı", "Aç", () => {
+        s2.appendChild(
+          row(p.id, (meta ? meta + " · " : "") + "kapalı", sw(false, () => {
             registry.remove("plugin:" + p.id);
             fill(card);
-          })
+          }))
         );
       }
     }
-    if (plugs.length) card.appendChild(note("Plugin açma/kapama bir sonraki açılışta geçerlidir."));
+    if (plugs.length) s2.appendChild(note("Plugin açma/kapama bir sonraki açılışta geçerlidir."));
+    body.appendChild(s2);
 
     // ---- Reklam ve UI temizliği ----
-    card.appendChild(section("Reklam ve UI temizliği"));
-    const adOff = registry.isDisabled("adblock");
-    card.appendChild(
+    const s3 = section("Reklam ve UI temizliği", ICO.shield);
+    const selCount = api.Adblock ? api.Adblock.selectors : 0;
+    const adOn = !registry.isDisabled("adblock");
+    s3.appendChild(
       row(
-        "Adblock (" + (api.Adblock ? api.Adblock.selectors : 0) + " seçik)",
-        adOff ? "kapalı" : "açık",
-        adOff ? "Aç" : "Kapat",
-        () => {
-          if (adOff) {
-            registry.remove("adblock");
-            makeAdblockModule(win, api).run();
-          } else {
+        "Adblock",
+        selCount + " seçik · mod " + (api.Adblock ? api.Adblock.mode : "?"),
+        sw(adOn, () => {
+          if (adOn) {
             registry.disable("adblock");
             const el = doc.getElementById("rs-adblock");
             if (el) el.remove();
+          } else {
+            registry.remove("adblock");
+            makeAdblockModule(win, api).run();
           }
           fill(card);
-        }
+        })
       )
     );
     for (const g of Object.keys(UI_GROUPS)) {
@@ -874,31 +1119,47 @@ function makePanelModule(win, api, registry) {
       try {
         off = win.localStorage.getItem("rs:ui:" + g) === "0";
       } catch (_) {}
-      card.appendChild(
-        row(g, off ? "gizli değil" : "gizli", off ? "Gizle" : "Göster", () => {
+      const hidden = !off;
+      s3.appendChild(
+        row(groupLabel(g), hidden ? "gizli" : "görünür", sw(hidden, () => {
           try {
-            if (off) win.localStorage.removeItem("rs:ui:" + g);
-            else win.localStorage.setItem("rs:ui:" + g, "0");
+            if (hidden) win.localStorage.setItem("rs:ui:" + g, "0");
+            else win.localStorage.removeItem("rs:ui:" + g);
           } catch (_) {}
           makeUiOverhaulModule(win, api).run();
           fill(card);
-        })
+        }))
       );
     }
+    body.appendChild(s3);
 
     // ---- Kalite ----
-    card.appendChild(section("Kalite (reveal-only)"));
-    const qn = api.Quality && api.Quality.revealed ? api.Quality.revealed : 0;
-    card.appendChild(
-      row("Kalite seçenekleri", qn ? "+" + qn + " açıldı" : "açılmadı", "Göster", () => {
-        if (api.revealQuality) api.revealQuality();
-        fill(card);
-      })
+    const s4 = section("Kalite seçenekleri", ICO.wave);
+    const qn = (api.Quality && api.Quality.revealed) || 0;
+    s4.appendChild(
+      row(
+        "Ayarlar > Çalma kalitesi",
+        "reveal-only · " + (qn ? "+" + qn + " seçenek açıldı" : "premium bypass yok — mevcut seçenekler açılır"),
+        pillBtn(qn ? "Tekrar göster" : "Göster", () => {
+          if (api.revealQuality) api.revealQuality();
+          fill(card);
+        })
+      )
     );
+    body.appendChild(s4);
 
     // ---- Bilgi ----
-    card.appendChild(section("Bilgi"));
-    card.appendChild(
+    const s5 = section("Bilgi", ICO.info);
+    const kbds = doc.createElement("div");
+    kbds.className = "rs-kbds";
+    for (const k of ["Ctrl+Shift+,", "ESC"]) {
+      const kd = doc.createElement("span");
+      kd.className = "rs-kbd";
+      kd.textContent = k;
+      kbds.appendChild(kd);
+    }
+    s5.appendChild(row("Paneli aç / kapat", "klavye kısayolları", kbds));
+    s5.appendChild(
       note(
         "mod: " +
           (api.Adblock ? api.Adblock.mode : "?") +
@@ -907,15 +1168,29 @@ function makePanelModule(win, api, registry) {
           " · konsol: window.ReverseSpotify"
       )
     );
-    card.appendChild(
-      note("Genel sıfırlama: localStorage.removeItem('rs:disabled'); CLI: python -m reversespotify status")
+    s5.appendChild(
+      note("Genel sıfırlama: localStorage.removeItem('rs:disabled') · CLI: python -m reversespotify status")
     );
+    const foot = doc.createElement("div");
+    foot.className = "rs-foot";
+    const f1 = doc.createElement("span");
+    f1.textContent = "ReverseSpotify · aegisSoft · MrSpy00";
+    const f2 = doc.createElement("span");
+    f2.textContent = "github.com/MrSpy00/ReverseSpotify";
+    foot.append(f1, f2);
+    s5.appendChild(foot);
+    body.appendChild(s5);
+
+    card.append(head, body);
   }
 
   function openPanel() {
     if (doc.getElementById("rs-panel")) return;
     const ov = doc.createElement("div");
     ov.id = "rs-panel";
+    ov.setAttribute("role", "dialog");
+    ov.setAttribute("aria-modal", "true");
+    ov.setAttribute("aria-label", "ReverseSpotify kontrol paneli");
     const card = doc.createElement("div");
     card.id = "rs-panel-card";
     ov.appendChild(card);
@@ -924,6 +1199,12 @@ function makePanelModule(win, api, registry) {
     });
     (doc.body || doc.documentElement).appendChild(ov);
     fill(card);
+    const xb = card.querySelector(".rs-x");
+    if (xb) {
+      try {
+        xb.focus();
+      } catch (_) {}
+    }
   }
 
   function toggle() {
@@ -935,17 +1216,74 @@ function makePanelModule(win, api, registry) {
     name: "panel",
     run() {
       setStyle(doc, "rs-panel-css", PANEL_CSS);
-      if (!doc.getElementById("rs-panel-btn")) {
-        const b = doc.createElement("button");
-        b.id = "rs-panel-btn";
-        b.type = "button";
-        b.title = "ReverseSpotify paneli (Ctrl+Shift+,)";
-        b.innerHTML = GEAR;
-        b.addEventListener("click", toggle);
-        (doc.body || doc.documentElement).appendChild(b);
+      let btn = doc.getElementById("rs-panel-btn");
+      if (!btn) {
+        btn = doc.createElement("button");
+        btn.id = "rs-panel-btn";
+        btn.type = "button";
+        btn.title = "ReverseSpotify paneli (Ctrl+Shift+,)";
+        btn.setAttribute("aria-label", "ReverseSpotify kontrol paneli");
+        btn.innerHTML = GEAR;
+        btn.addEventListener("click", toggle);
+        (doc.body || doc.documentElement).appendChild(btn);
       }
-      // TR klavyede Shift+, produces "<" — her iki tuş da açılır
+      // Üst bara yerleştir; bulunamazsa sabit fallback; Spotify yeniden
+      // çizerse toparla. Buton, üst bara yerleşene (veya 5sn geçene) kadar
+      // gizli kalır — alt köşeden üst bara zıplama olmaz.
+      const t0 = Date.now();
+      let shown = false;
+      const show = () => {
+        if (!shown) {
+          shown = true;
+          btn.style.visibility = "";
+        }
+      };
+      const ensureMounted = () => {
+        try {
+          const slot = topbarSlot(doc);
+          const inTop = btn.classList.contains("rs-in-topbar");
+          if (inTop && btn.isConnected && (!slot || btn.parentElement === slot.parent)) {
+            show();
+            return;
+          }
+          btn.className = "";
+          if (slot) {
+            const ref = slot.before;
+            if (ref && typeof ref.className === "string" && ref.className) {
+              // Spotify'ın kendi buton sınıflarını kopyala → yerel görünüm
+              btn.className = ref.className + " rs-in-topbar";
+            } else {
+              btn.className = "rs-in-topbar";
+            }
+            slot.parent.insertBefore(btn, slot.before);
+            show();
+          } else if (!btn.isConnected) {
+            (doc.body || doc.documentElement).appendChild(btn);
+          }
+          if (!shown && Date.now() - t0 > 5000) show();
+        } catch (_) {
+          try {
+            if (!btn.isConnected) (doc.body || doc.documentElement).appendChild(btn);
+            if (!shown && Date.now() - t0 > 5000) show();
+          } catch (__) {}
+        }
+      };
+      btn.style.visibility = "hidden";
+      ensureMounted();
+      // ilk 10 deneme 400ms (üst bar açılışı beklenir), sonrası 3sn guard
+      let tries = 0;
+      const tick = () => {
+        ensureMounted();
+        tries += 1;
+        win.setTimeout(tick, tries <= 10 ? 400 : 3000);
+      };
+      win.setTimeout(tick, 400);
+      // TR klavyede Shift+, produces "<" — her iki tuş da açılır; ESC kapatır
       win.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && doc.getElementById("rs-panel")) {
+          closePanel();
+          return;
+        }
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "," || e.key === "<")) {
           e.preventDefault();
           toggle();
@@ -972,6 +1310,9 @@ if (typeof module !== "undefined" && module.exports) {
     makeUiOverhaulModule,
     makeQualityModule,
     makePanelModule,
+    swatchFor,
+    groupLabel,
+    topbarSlot,
     resolveTheme,
     pluginRuntimeState,
     ADBLOCK_SELECTORS,
