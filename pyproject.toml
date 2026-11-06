@@ -1,0 +1,11 @@
+[project]
+name = "reversespotify"
+version = "0.1.0"
+description = "ReverseSpotify — bağımsız Spotify desktop mod motoru (aegisSoft)"
+requires-python = ">=3.14"
+
+[project.scripts]
+reverse-spotify = "reversespotify.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
