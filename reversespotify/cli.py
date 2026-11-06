@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -176,7 +177,19 @@ def cmd_status(args: argparse.Namespace) -> int:
         if isinstance(p, dict) and "id" in p:
             state = "aktif" if p.get("enabled", True) else "pasif"
             print(f"plugin: {p['id']} ({state})")
+    mode, count = _adblock_info()
+    print(f"adblock: {mode} ({count} seçik)")
     return 0
+
+
+def _adblock_info() -> tuple[str, int]:
+    """loader kaynağından adblock modu ve seçik sayısını oku (dürüst statik rapor)."""
+    loader = Path(__file__).resolve().parent.parent / "loader" / "reverse-loader.js"
+    src = loader.read_text(encoding="utf-8")
+    mode_m = re.search(r'ADBLOCK_MODE = "([^"]+)"', src)
+    block_m = re.search(r"ADBLOCK_SELECTORS = \[(.*?)\]", src, re.S)
+    count = len(re.findall(r'"[^"]+"', block_m.group(1))) if block_m else 0
+    return (mode_m.group(1) if mode_m else "?"), count
 
 
 def cmd_themes_list(args: argparse.Namespace) -> int:

@@ -487,13 +487,143 @@ function browserBoot() {
           name: "plugins",
           run: () => runPlugins(api, registry, api.settings.plugins || [], null, win.localStorage),
         },
-        { name: "adblock", run() {} },
-        { name: "ui-overhaul", run() {} },
-        { name: "quality", run() {} },
+        makeAdblockModule(win, api),
+        makeUiOverhaulModule(win, api),
+        makeQualityModule(win, api),
       ],
       registry
     );
   });
+}
+
+// ---- T7: ad-block / UI temizliği / kalite reveal ----
+
+// docs/xpui-findings.md §2: ses-reklam istemci hook'u keşfedilmedi → dürüst rapor.
+const ADBLOCK_MODE = "ui-only";
+
+// docs/xpui-findings.md §1: hepsi grep ile keşfedilmiş gerçek testid'ler.
+const ADBLOCK_SELECTORS = [
+  "home-ads-container",
+  "home-ad-card",
+  "home-ad-display-asset-fallback",
+  "home-ad-video-asset",
+  "regular-advertiser-info",
+  "compact-advertiser-info",
+  "leavebehind",
+  "leavebehinds-wrapper",
+  "leavebehinds-list-wrapper",
+  "leavebehinds-title",
+  "leavebehinds-see-all",
+  "show-leavebehinds-container",
+  "ads-video-player-npv",
+  "ads-npv-header-maximize-button",
+  "canvas-ad-container",
+  "canvas-ad-player",
+  "skippable-ad-skip-button",
+  "skippable-ad-circle-timer",
+  "skippable-ad-delay",
+  "embedded-ad",
+  "embedded-ad-carousel",
+  "embedded-ad-carousel-header-logo",
+  "embedded-ad-html-display",
+  "embedded-ad-html-creative",
+  "embedded-ad-cta-button-fallback",
+  "embedded-ad-creative-link",
+  "standalone-video-ad-player",
+  "video-player-ad-wrapper",
+  "ad-controls",
+  "context-ad-logo",
+  "ad-companion-card",
+  "ad-companion-card-tagline",
+  "survey-ad",
+  "survey-ad-thank-you",
+  "survey-option-ad",
+  "button-like-ad",
+  "button-dislike-ad",
+  "adfeedback-context-menu",
+  "PanelHeader_AdContextMenuButton",
+];
+
+const UI_GROUPS = {
+  upsell: ["upsell-download-app-button", "sponsored-recommendation-modal-trigger"],
+  dsa: ["home-dsa-message-banner"],
+};
+
+function setStyle(doc, id, css) {
+  let el = doc.getElementById(id);
+  if (!el) {
+    el = doc.createElement("style");
+    el.id = id;
+    (doc.head || doc.documentElement).appendChild(el);
+  }
+  el.textContent = css;
+}
+
+function hideCss(ids) {
+  return ids.map((id) => `[data-testid="${id}"]`).join(",") + "{display:none!important}";
+}
+
+function makeAdblockModule(win, api) {
+  return {
+    name: "adblock",
+    run() {
+      setStyle(win.document, "rs-adblock", hideCss(ADBLOCK_SELECTORS));
+      api.Adblock = { mode: ADBLOCK_MODE, selectors: ADBLOCK_SELECTORS.length };
+    },
+  };
+}
+
+function makeUiOverhaulModule(win, api) {
+  return {
+    name: "ui-overhaul",
+    run() {
+      const active = [];
+      for (const group of Object.keys(UI_GROUPS)) {
+        if (win.localStorage && win.localStorage.getItem("rs:ui:" + group) === "0") continue;
+        setStyle(win.document, "rs-ui-" + group, hideCss(UI_GROUPS[group]));
+        active.push(group);
+      }
+      api.Ui = { groups: Object.keys(UI_GROUPS), active };
+    },
+  };
+}
+
+function makeQualityModule(win, api) {
+  const doc = win.document;
+  // Reveal-only: DOM'da mevcut disabled option'ı serbest bırakır, option üretmez/değmez.
+  function reveal() {
+    const opts = doc.querySelectorAll('select[id*="quality" i] option[disabled]');
+    let n = 0;
+    for (const o of opts) {
+      if (o.disabled) {
+        o.disabled = false;
+        n++;
+      }
+    }
+    const prev = api.Quality && api.Quality.revealed ? api.Quality.revealed : 0;
+    api.Quality = { mode: "reveal-only", revealed: prev + n };
+    return n;
+  }
+  return {
+    name: "quality",
+    reveal,
+    run() {
+      reveal();
+      if (typeof win.MutationObserver === "function") {
+        let scheduled = false;
+        const mo = new win.MutationObserver(() => {
+          if (scheduled) return;
+          scheduled = true;
+          const raf = win.requestAnimationFrame || ((fn) => win.setTimeout(fn, 16));
+          raf(() => {
+            scheduled = false;
+            reveal();
+          });
+        });
+        mo.observe(doc.documentElement || doc, { childList: true, subtree: true });
+      }
+    },
+  };
 }
 
 // ---- Dışa aktarım / giriş ----
@@ -508,6 +638,10 @@ if (typeof module !== "undefined" && module.exports) {
     themeEngineModule,
     makePluginApi,
     runPlugins,
+    makeAdblockModule,
+    makeUiOverhaulModule,
+    makeQualityModule,
+    ADBLOCK_SELECTORS,
   };
 }
 
