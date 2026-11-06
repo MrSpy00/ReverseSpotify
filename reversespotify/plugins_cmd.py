@@ -127,7 +127,7 @@ def resolve_add(ref: str) -> dict:
     local = root / ref
     if (local / "manifest.json").exists():
         mf = load_plugin_dir(local)
-        return {"manifest": mf, "src": (local / mf["entry"]).read_bytes()}
+        return {"manifest": mf, "src": (local / mf["entry"]).read_bytes(), "local": True}
 
     # 2) github URL
     if ref.startswith("http"):

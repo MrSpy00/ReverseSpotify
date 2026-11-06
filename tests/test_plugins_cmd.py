@@ -54,6 +54,15 @@ def test_add_builtin_plugin(fake_apps, fake_plugins_root):
     assert cli.main(["status", "--spotify-dir", str(fake_apps)]) == 0
 
 
+def test_add_builtin_does_not_rewrite_manifest(fake_apps, fake_plugins_root):
+    """Yerel plugin add'i repo/fixture dosyalarını bayt-düzeyinde olduğu gibi bırakır."""
+    before = (fake_plugins_root / "key-highlight" / "manifest.json").read_bytes()
+    assert _install(fake_apps) == 0
+    assert _add(fake_apps, "key-highlight") == 0
+    after = (fake_plugins_root / "key-highlight" / "manifest.json").read_bytes()
+    assert after == before
+
+
 def test_add_unknown_fails(fake_apps, fake_plugins_root):
     assert _install(fake_apps) == 0
     assert _add(fake_apps, "yok-boyle-plugin") == 1

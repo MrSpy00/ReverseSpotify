@@ -266,7 +266,8 @@ def cmd_plugins_add(args: argparse.Namespace) -> int:
         print(f"hata: {pid} zaten kurulu (yeniden kurmak için --force)")
         return 1
 
-    plugins_cmd.save_plugin(info["manifest"], info["src"])
+    if not info.get("local"):
+        plugins_cmd.save_plugin(info["manifest"], info["src"])
     rest = [p for p in cfg["plugins"] if not (isinstance(p, dict) and p.get("id") == pid)]
     new_list = rest + [
         {
