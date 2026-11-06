@@ -10,7 +10,7 @@ Hedef: Spotify Desktop 1.3.8.620 (Windows). Komutlar repo kökünden:
 | `install --yes` | Yedek alır (pristine), loader + tema + plugin'leri paketler, Spotify'ı başlatır |
 | `restore --yes` | Bayt-tamam orijinal `xpui.spa`'ya döner, marker'ı siler |
 | `status` | Sağlık raporu; exit: **0** modded-sağlıklı, **1** bozuk, **2** vanilla |
-| `themes list` / `themes set <id> --yes` | Tema listele / uygula (temalar: `clean-dark`, `amoled`) |
+| `themes list` / `themes set <id> --yes` | Tema listele / uygula (8 tema: `clean-dark`, `amoled`, `crimson`, `ocean`, `forest`, `amber`, `lavender`, `nord` — crimson arkaplan duvar kağıtlı) |
 | `plugins list` / `plugins add <ref> --yes` | Plugin envanteri / ekle (yerel `plugins/<id>` · GitHub URL · registry id) |
 | `plugins remove\|enable\|disable <id> --yes` | Plugin yönetimi (runtime disable tarayıcıda `rs:disabled` ile olur) |
 | `watch --once` | Tek tespit+onarım: `ok`→0 · `healed`→0 · `vanilla`→2 · `broken`→1 |
@@ -18,19 +18,23 @@ Hedef: Spotify Desktop 1.3.8.620 (Windows). Komutlar repo kökünden:
 
 ## Uygulama içi kontrol paneli (terminal gerekmez)
 
-Spotify açıkken **üst bardaki dişli ikonuna** (profil avatarının solunda, Spotify'ın kendi
-buton stiliyle) veya **Ctrl+Shift+,** tuşlarına bas; **ESC** ile kapat:
+Spotify açıkken **üst bardaki kırmızı anka kuşu ikonuna** (profil avatarının solunda, Spotify'ın
+kendi buton stiliyle) veya **Ctrl+Shift+,** tuşlarına bas; **ESC** ile kapat. Panel dört sekmeli:
 
-- **Tema** — kurulu temalar arasında kartlarla anında geçiş (renk önizlemeli, seçili kart
-  yeşil çerçeve + check), "Kapalı (vanilla görünüm)" ile temayı kapatma. Panel seçimi
-  `rs:theme` localStorage anahtarında tutulur; "Varsayılan (config)" ile CLI `themes set`
-  kararına dönülür.
-- **Pluginler** — aktif plugin'i aç/kapat (`rs:disabled`, bir sonraki açılışta geçerli;
-  CLI-pasif olanlar panel'den açılmaz).
-- **Reklam ve UI temizliği** — adblock ve upsell/dsa gruplarını anında aç/kapat
-  (`rs:ui:*` anahtarları, sayfa yenilenmeden etkili).
-- **Kalite** — reveal-only seçik sayısını gösterir (`Göster` ile yeniden dener).
-- **Bilgi** — mod, fallback, konsol adresi ve genel sıfırlama talimatı.
+- **Tema** — kurulu temalar arasında kartlarla anında geçiş (manifest'ten gelen ad + renk
+  önizlemeli, seçili kart yeşil çerçeve + check), "Kapalı (vanilla görünüm)" ile temayı
+  kapatma. Panel seçimi `rs:theme` localStorage anahtarında tutulur; "Varsayılan (config)"
+  ile CLI `themes set` kararına dönülür. Crimson teması seçiliyken arkaplan duvar kağıdı
+  (`#rs-bg` katmanı) otomatik yüklenir.
+- **Eklentiler** — aktif plugin'i aç/kapat (`rs:disabled`, bir sonraki açılışta geçerli;
+  CLI-pasif olanlar panel'den açılmaz). Satırdaki chevron alt menüyü açar: performans
+  sınıfı, izinler, giriş dosyası ve varsa depo bağlantısı.
+- **Temizlik** — adblock ve upsell/dsa gruplarını anında aç/kapat (`rs:ui:*` anahtarları,
+  sayfa yenilenmeden etkili).
+- **Araçlar** — kalite reveal-only seçik sayısı (`Göster` ile yeniden dener), kısayollar,
+  mod/fallback bilgisi ve genel sıfırlama talimatı.
+- **Ayak bağlantıları** — GitHub · aegisSoft · MrSpy00 (hepsi tıklanabilir, URL'ler
+  config'ten gelir — hardcoded değil).
 
 Öncelik: panel (`rs:theme`) > CLI config. Panel'de "Varsayılan (config)" seçeneği yoksa
 (ilk kez tema seçilmediyse) CLI config uygulanır.

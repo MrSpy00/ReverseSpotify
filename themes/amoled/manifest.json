@@ -3,5 +3,6 @@
   "name": "AMOLED Black",
   "author": "aegisSoft",
   "version": "1.0.0",
-  "entryCss": "theme.css"
+  "entryCss": "theme.css",
+  "swatch": ["#000000", "#0d0d0d"]
 }

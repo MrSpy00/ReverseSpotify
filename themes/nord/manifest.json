@@ -1,0 +1,8 @@
+{
+  "id": "nord",
+  "name": "Nord Frost",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css",
+  "swatch": ["#14171c", "#20242b"]
+}

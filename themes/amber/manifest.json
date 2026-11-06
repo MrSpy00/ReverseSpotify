@@ -1,0 +1,8 @@
+{
+  "id": "amber",
+  "name": "Amber Dusk",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css",
+  "swatch": ["#14100a", "#201a11"]
+}

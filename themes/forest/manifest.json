@@ -1,0 +1,8 @@
+{
+  "id": "forest",
+  "name": "Dark Forest",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css",
+  "swatch": ["#0c120d", "#162017"]
+}

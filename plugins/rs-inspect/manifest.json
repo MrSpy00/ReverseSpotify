@@ -1,0 +1,8 @@
+{
+  "id": "rs-inspect",
+  "name": "RS Inspect",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "permissions": ["settings", "ui"],
+  "perfClass": "medium"
+}

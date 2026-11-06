@@ -1,0 +1,8 @@
+{
+  "id": "lavender",
+  "name": "Lavender Haze",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css",
+  "swatch": ["#11101a", "#1c1a2a"]
+}

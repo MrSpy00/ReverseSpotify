@@ -39,6 +39,9 @@ def launch():
 
 def main():
     expr = sys.argv[1]
+    if expr.startswith("@"):
+        # @dosya yolu: JS'i dosyadan oku (PS argüman tırnaklarını bozmaz)
+        expr = pathlib.Path(expr[1:]).read_text(encoding="utf-8")
     shot = sys.argv[2] if len(sys.argv) > 2 else None
     kill()
     ws_url = launch()

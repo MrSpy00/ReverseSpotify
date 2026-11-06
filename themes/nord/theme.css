@@ -1,0 +1,16 @@
+/* ReverseSpotify — Nord Frost: buzlu gri-mavi kuzey.
+ * Yalnız encore base-set değişkenleri (variant setlere dokunulmaz — mirror-safe). */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-base: #14171c;
+  --background-highlight: #1c2027;
+  --background-press: #0d0f13;
+  --background-elevated-base: #20242b;
+  --background-elevated-highlight: #2a2f38;
+  --background-elevated-press: #171a1f;
+  --background-tinted-base: #ffffff14;
+  --background-tinted-highlight: #ffffff20;
+  --background-tinted-press: #ffffff30;
+  --text-subdued: #9ba5b1;
+  --decorative-subdued: #2a2f38;
+}

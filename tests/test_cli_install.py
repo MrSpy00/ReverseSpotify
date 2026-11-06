@@ -19,7 +19,7 @@ def test_install_uses_backup_and_patches(fake_apps):
     assert "reverse-loader.js" in entries
     cfg = json.loads(entries["reverse/config.json"])
     assert cfg["theme"] is None and cfg["plugins"] == []
-    assert cfg["themes"] == ["amoled", "clean-dark"]  # panel tema listesi
+    assert cfg["themes"] == ["amber", "amoled", "clean-dark", "crimson", "forest", "lavender", "nord", "ocean"]  # panel tema listesi
     assert pristine.exists()
     assert spa.spa_hash(pristine) == before  # pristine orijinal baytlardır
 

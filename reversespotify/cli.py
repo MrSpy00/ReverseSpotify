@@ -87,7 +87,8 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET, cfg_update=_UNSET)
     if cfg_update is not _UNSET:
         cfg.update(cfg_update)
 
-    # tema CSS'lerini paketle; diskte olmayan eski reverse/themes/* girişlerini at
+    # tema CSS'lerini + manifest'te deklare edilmiş varlıkları (arkaplan) paketle;
+    # diskte olmayan eski reverse/themes/* girişlerini at
     wanted = set()
     theme_list = themes_cmd.list_themes()
     for th in theme_list:
@@ -97,11 +98,42 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET, cfg_update=_UNSET)
         entry = f"reverse/themes/{th['id']}/{th['entryCss']}"
         wanted.add(entry)
         entries[entry] = src.read_bytes()
+        for key in ("background", "backgroundVideo"):
+            if key in th:
+                asset = THEMES_ROOT / th["id"] / th[key]  # varlık doğrulaması themes_cmd'de
+                entry_a = f"reverse/themes/{th['id']}/{th[key]}"
+                wanted.add(entry_a)
+                entries[entry_a] = asset.read_bytes()
+        mf = THEMES_ROOT / th["id"] / "manifest.json"  # runtime manifest fetch (swatch/bg)
+        entry_m = f"reverse/themes/{th['id']}/manifest.json"
+        wanted.add(entry_m)
+        entries[entry_m] = mf.read_bytes()
     for stale in [k for k in entries if k.startswith("reverse/themes/") and k not in wanted]:
         del entries[stale]
 
-    # panel tarayıcıdan tema listesini bu alandan okur (config paketlendikten sonra yazılır)
+    # panel tarayıcıdan tema listesini/önizlemesini bu alandan okur (config write'dan önce)
     cfg["themes"] = sorted(t["id"] for t in theme_list)
+    cfg["themeMeta"] = {
+        t["id"]: {
+            k: t[k]
+            for k in ("name", "swatch", "background", "backgroundVideo")
+            if k in t
+        }
+        for t in theme_list
+    }
+    cfg["repo"] = config.PROJECT_REPO
+    # panel ayak linkleri — loader'da URL hardcoded değil, hebi config'ten
+    cfg["links"] = {
+        "repo": config.PROJECT_REPO,
+        "site": config.SITE_URL,
+        "author": config.AUTHOR_URL,
+    }
+    # eski entry'lerde eksik repo alanını tamamla (panelde depo linki)
+    for entry_p in cfg["plugins"]:
+        if isinstance(entry_p, dict) and entry_p.get("id") and not entry_p.get("repo"):
+            url = plugins_cmd.registry_url(entry_p["id"])
+            if url:
+                entry_p["repo"] = url
     entries["reverse/config.json"] = json.dumps(cfg).encode("utf-8")
 
     # plugin girişlerini paketle (config'teki id/entry üzerinden); bayatları at
@@ -331,14 +363,19 @@ def cmd_plugins_add(args: argparse.Namespace) -> int:
     if not info.get("local"):
         plugins_cmd.save_plugin(info["manifest"], info["src"])
     rest = [p for p in cfg["plugins"] if not (isinstance(p, dict) and p.get("id") == pid)]
-    new_list = rest + [
-        {
-            "id": pid,
-            "enabled": True,
-            "entry": info["manifest"]["entry"],
-            "permissions": info["manifest"]["permissions"],
-        }
-    ]
+    # paneldeki depo linki: registry id eşleşmesi, yoksa doğrudan github ref'i
+    repo = plugins_cmd.registry_url(pid)
+    if not repo and args.ref.startswith("https://github.com/"):
+        repo = args.ref.rstrip("/").removesuffix(".git")
+    new_entry = {
+        "id": pid,
+        "enabled": True,
+        "entry": info["manifest"]["entry"],
+        "permissions": info["manifest"]["permissions"],
+    }
+    if repo:
+        new_entry["repo"] = repo
+    new_list = rest + [new_entry]
     # her ekleme (ilk kur + --force) auto-disable kaydını temizlesin: rs:disabled'ta
     # eski kırık kayıt varsa plugin kurulur kurulmaz ölü kalırdı
     entry_name = f"plugin:{pid}"

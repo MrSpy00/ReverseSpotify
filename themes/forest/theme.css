@@ -1,0 +1,16 @@
+/* ReverseSpotify — Dark Forest: derin yeşil-siyah orman.
+ * Yalnız encore base-set değişkenleri (variant setlere dokunulmaz — mirror-safe). */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-base: #0c120d;
+  --background-highlight: #131c14;
+  --background-press: #070a07;
+  --background-elevated-base: #162017;
+  --background-elevated-highlight: #1d2b1f;
+  --background-elevated-press: #101710;
+  --background-tinted-base: #ffffff14;
+  --background-tinted-highlight: #ffffff20;
+  --background-tinted-press: #ffffff30;
+  --text-subdued: #97a89a;
+  --decorative-subdued: #1d2b1f;
+}

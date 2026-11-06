@@ -1,0 +1,8 @@
+{
+  "id": "shortcuts-help",
+  "name": "Shortcuts Help",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "permissions": ["ui"],
+  "perfClass": "light"
+}

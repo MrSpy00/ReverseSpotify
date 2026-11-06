@@ -51,7 +51,10 @@ test("theme engine fetches theme css and applies it", async () => {
   });
   assert.equal(m.name, "theme-engine");
   await m.run();
-  assert.deepEqual(urls, ["/reverse/themes/amoled/theme.css"]);
+  assert.deepEqual(urls, [
+    "/reverse/themes/amoled/theme.css",
+    "/reverse/themes/amoled/manifest.json", // arkaplan bilgisi manifestten
+  ]);
   assert.deepEqual(applied, ["/*amoled*/"]);
 });
 

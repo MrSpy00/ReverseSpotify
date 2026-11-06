@@ -1,0 +1,8 @@
+{
+  "id": "back-to-top",
+  "name": "Back to Top",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "permissions": ["ui"],
+  "perfClass": "light"
+}

@@ -5,25 +5,32 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const rs = require("../../loader/reverse-loader.js");
 
-// ---- THEME_SWATCHES / swatchFor ----
+// ---- swatchFor (meta tabanlı — renkler manifestten gelir, kodda sabit renk yok) ----
 
-test("swatchFor: clean-dark gercek tema renkleri", () => {
-  assert.deepEqual(rs.swatchFor("clean-dark"), ["#0e0e10", "#1a1a1c"]);
+const META = {
+  "clean-dark": { name: "Clean Dark", swatch: ["#0e0e10", "#1a1a1c"] },
+  amoled: { name: "AMOLED Black", swatch: ["#000000", "#0d0d0d"] },
+  bare: { name: "Bare" },
+};
+
+test("swatchFor: themeMeta'dan tema renkleri", () => {
+  assert.deepEqual(rs.swatchFor(META, "clean-dark"), ["#0e0e10", "#1a1a1c"]);
+  assert.deepEqual(rs.swatchFor(META, "amoled"), ["#000000", "#0d0d0d"]);
 });
 
-test("swatchFor: amoled gercek tema renkleri", () => {
-  assert.deepEqual(rs.swatchFor("amoled"), ["#000000", "#0d0d0d"]);
-});
-
-test("swatchFor: bilinmeyen id ve null icin varsayilan doner", () => {
+test("swatchFor: meta yok / swatch eksik / bozuk icin varsayilan doner", () => {
   const fallback = ["#121212", "#1f1f1f"];
-  assert.deepEqual(rs.swatchFor("yok-boyle"), fallback);
-  assert.deepEqual(rs.swatchFor(null), fallback);
-  assert.deepEqual(rs.swatchFor(undefined), fallback);
-  // donen dizi kopya olmalı: degistirmek sabitleri bozmamali
-  const a = rs.swatchFor("clean-dark");
+  assert.deepEqual(rs.swatchFor(META, "yok-boyle"), fallback);
+  assert.deepEqual(rs.swatchFor(META, "bare"), fallback);
+  assert.deepEqual(rs.swatchFor(null, "clean-dark"), fallback);
+  assert.deepEqual(rs.swatchFor(undefined, undefined), fallback);
+});
+
+test("swatchFor: donen dizi kopya olmalidir (girdi ve sabit degismez)", () => {
+  const a = rs.swatchFor(META, "clean-dark");
   a[0] = "#ff0000";
-  assert.deepEqual(rs.swatchFor("clean-dark"), ["#0e0e10", "#1a1a1c"]);
+  assert.deepEqual(rs.swatchFor(META, "clean-dark"), ["#0e0e10", "#1a1a1c"]);
+  assert.equal(META["clean-dark"].swatch[0], "#0e0e10");
 });
 
 // ---- UI_LABELS / groupLabel ----

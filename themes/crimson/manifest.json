@@ -1,0 +1,9 @@
+{
+  "id": "crimson",
+  "name": "Crimson Ember",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css",
+  "swatch": ["#140b0d", "#201417"],
+  "background": "wallpaper.svg"
+}

@@ -10,14 +10,15 @@
 | GitHub | https://github.com/MrSpy00/ReverseSpotify |
 | Hedef | Spotify Desktop **1.3.8.620** (`%APPDATA%\Spotify`) — Windows x64 |
 | Stack | Python 3.14 (CLI/yama/izleyici) + saf JS loader (runtime) |
-| Test | `python -m pytest -q` (56) · `node --test "tests/js/*.test.mjs"` (38) |
+| Test | `python -m pytest -q` (74) · `node --test "tests/js/*.test.mjs"` (49) |
 
 ## Ne yapar
 
-Spotify'ı değiştirmeden (orijinal dosyalar korunarak) **kendi mod motorumuzla** tema,
-plugin, ad-block, UI temizliği ve kalite-reveal ekler. **Uygulama içi kontrol paneli**
-(sağ alt dişli buton / `Ctrl+Shift+,`) — tema, plugin, reklam ve kalite ayarları
-terminal gerekmeden yönetilir. Spicetify bağımlılığı **yok**,
+Spotify'ı değiştirmeden (orijinal dosyalar korunarak) **kendi mod motorumuzla** 8 tema
+(arkaplan duvar kağıdı/video destekli), 6 eklenti, ad-block, UI temizliği ve kalite-reveal
+ekler. **Uygulama içi kontrol paneli** (üst barda kırmızı anka kuşu ikonu / `Ctrl+Shift+,`) —
+tema, eklenti, temizlik ve araçlar sekmeleri terminal gerekmeden yönetilir. Spicetify
+bağımlılığı **yok**,
 sürüm-agnostik loader, güncelleme sonrası **otomatik onarım**. Premium bypass **yok**
 (ToS sınırı; kalite yalnızca reveal-only).
 
@@ -63,14 +64,20 @@ docs/                    specs/ plans/ xpui-findings.md usage.md
   entitlement/`maxSupportedQuality`/option üretimine dokunulmaz (test ile kilitli).
 - **Ad-block:** 39 gerçek `data-testid` CSS hide katmanı; ses-hook yok → dürüst
   `mode=ui-only` (docs/xpui-findings.md §2).
-- **Kontrol paneli (v2):** `panel` modülü (6/6 boot) — **üst bardaki dişli ikonu**
-  (profil avatarının solu, Spotify'ın native buton sınıfları kopyalı; üst bar
+- **Kontrol paneli (v3):** `panel` modülü (6/6 boot) — **üst bardaki kırmızı anka kuşu
+  ikonu** (profil avatarının solu, Spotify'ın native buton sınıfları kopyalı; üst bar
   yoksa sağ-alt fallback, 400ms×10 + 3sn sweep ile taşınır) + `Ctrl+Shift+,` aç /
-  `ESC` kapat; tema kartları (renk swatch + check), yeşil switch'ler, 11px uppercase
-  bölüm başlıkları, pill butonlar, responsive (520/360px kırılım), SVG ikon,
+  `ESC` kapat; **4 sekme** (Tema / Eklentiler / Temizlik / Araçlar, `role=tablist`,
+  140ms fade, aktif sekme kırmızı underline), tema kartları (manifest `themeMeta`'dan
+  ad + renk swatch + check), eklenti satırlarında **genişletilebilir alt menü**
+  (chevron → `grid-template-rows 0fr→1fr`, izin/sınıf/depo chip'leri), tıklanabilir
+  ayak bağlantıları (`extLink` → `win.open`, URL'ler config `links` alanından),
+  yeşil switch'ler, 11px uppercase bölüm başlıkları, pill butonlar (press scale .96),
+  tabular-nums, responsive (520/360px kırılım), SVG ikon (emoji yasak),
   `prefers-reduced-motion` destekli. Öncelik: `rs:theme` (localStorage)
   > CLI config; UI grupları `rs:ui:*` anında etkili, plugin aç-kapa bir sonraki
-  açılışta geçerli. İkonlar SVG (emoji yasak).
+  açılışta geçerli. Tema değişince `loadThemeBackground` manifest fetch + `#rs-bg`
+  katmanı (görsel cover / video autoplay, opaklık 0.22).
 
 ## Derleme & Kurulum (tek komut)
 
@@ -93,8 +100,8 @@ python -m reversespotify watch --install-task  # ReverseSpotifyHeal (logon+günl
 ## Test & Doğrulama
 
 ```powershell
-python -m pytest -q                                        # 56 passed
-node --test "tests/js/*.test.mjs"                          # 38 passed
+python -m pytest -q                                        # 74 passed
+node --test "tests/js/*.test.mjs"                          # 49 passed
 python tools/cdp_smoke.py "(async()=>JSON.stringify(window.ReverseSpotify.modules))()"
 ```
 

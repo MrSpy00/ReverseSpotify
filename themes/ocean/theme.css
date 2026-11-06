@@ -1,0 +1,16 @@
+/* ReverseSpotify — Deep Ocean: soğuk lacivert-siyah derinlik.
+ * Yalnız encore base-set değişkenleri (variant setlere dokunulmaz — mirror-safe). */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-base: #0b1017;
+  --background-highlight: #121a25;
+  --background-press: #060a10;
+  --background-elevated-base: #131c28;
+  --background-elevated-highlight: #1a2635;
+  --background-elevated-press: #0e151f;
+  --background-tinted-base: #ffffff14;
+  --background-tinted-highlight: #ffffff20;
+  --background-tinted-press: #ffffff30;
+  --text-subdued: #93a4b8;
+  --decorative-subdued: #1a2635;
+}

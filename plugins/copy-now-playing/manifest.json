@@ -1,0 +1,8 @@
+{
+  "id": "copy-now-playing",
+  "name": "Copy Now Playing",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "permissions": ["ui"],
+  "perfClass": "light"
+}

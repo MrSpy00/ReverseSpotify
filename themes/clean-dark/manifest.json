@@ -3,5 +3,6 @@
   "name": "Clean Dark",
   "author": "aegisSoft",
   "version": "1.0.0",
-  "entryCss": "theme.css"
+  "entryCss": "theme.css",
+  "swatch": ["#0e0e10", "#1a1a1c"]
 }

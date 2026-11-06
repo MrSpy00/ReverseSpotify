@@ -3,6 +3,26 @@
     {
       "id": "key-highlight",
       "repo": "https://github.com/MrSpy00/ReverseSpotify"
+    },
+    {
+      "id": "back-to-top",
+      "repo": "https://github.com/MrSpy00/ReverseSpotify"
+    },
+    {
+      "id": "shortcuts-help",
+      "repo": "https://github.com/MrSpy00/ReverseSpotify"
+    },
+    {
+      "id": "copy-now-playing",
+      "repo": "https://github.com/MrSpy00/ReverseSpotify"
+    },
+    {
+      "id": "remaining-time",
+      "repo": "https://github.com/MrSpy00/ReverseSpotify"
+    },
+    {
+      "id": "rs-inspect",
+      "repo": "https://github.com/MrSpy00/ReverseSpotify"
     }
   ]
 }

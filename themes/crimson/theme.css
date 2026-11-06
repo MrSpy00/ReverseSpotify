@@ -1,0 +1,16 @@
+/* ReverseSpotify — Crimson Ember: koyu kızıl kömür + duvar kağıdı.
+ * Yalnız encore base-set değişkenleri (variant setlere dokunulmaz — mirror-safe). */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-base: #140b0d;
+  --background-highlight: #1d1215;
+  --background-press: #0a0507;
+  --background-elevated-base: #201417;
+  --background-elevated-highlight: #2a1b1f;
+  --background-elevated-press: #170e10;
+  --background-tinted-base: #ffffff14;
+  --background-tinted-highlight: #ffffff20;
+  --background-tinted-press: #ffffff30;
+  --text-subdued: #b09a9d;
+  --decorative-subdued: #2a1b1f;
+}

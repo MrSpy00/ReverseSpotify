@@ -171,6 +171,66 @@ function resolveTheme(win, settings) {
   return t || null;
 }
 
+// Arka plan katmanı: manifest.background (görsel) veya .backgroundVideo (mp4/webm).
+// Tek #rs-bg katmanı; tekrar çağrıda replace (çift katman yok). Opaklik 0-1 dışi → varsayilan 0.22.
+function applyBackground(win, id, spec) {
+  const doc = win && win.document;
+  if (!doc || !doc.getElementById) return false;
+  const old = doc.getElementById("rs-bg");
+  const file = spec && (spec.backgroundVideo || spec.background);
+  if (!id || !file) {
+    if (old) old.remove();
+    return false;
+  }
+  let op = 0.22;
+  const raw = spec.backgroundOpacity;
+  if (typeof raw === "number" && raw >= 0 && raw <= 1) op = raw;
+  let layer = old;
+  if (!layer) {
+    layer = doc.createElement("div");
+    layer.id = "rs-bg";
+    layer.setAttribute("aria-hidden", "true");
+    doc.body.insertBefore(layer, doc.body.firstChild);
+  }
+  layer.textContent = "";
+  const url = "/reverse/themes/" + encodeURIComponent(id) + "/" + encodeURIComponent(file);
+  layer.style.position = "fixed";
+  layer.style.inset = "0";
+  layer.style.zIndex = "6";
+  layer.style.pointerEvents = "none";
+  layer.style.opacity = String(op);
+  if (spec.backgroundVideo) {
+    const v = doc.createElement("video");
+    v.autoplay = true;
+    v.loop = true;
+    v.muted = true;
+    v.playsInline = true;
+    v.src = url;
+    v.style.cssText = "width:100%;height:100%;object-fit:cover;";
+    layer.appendChild(v);
+  } else {
+    layer.style.backgroundImage = 'url("' + url + '")';
+    layer.style.backgroundSize = "cover";
+    layer.style.backgroundPosition = "center";
+  }
+  return true;
+}
+
+// Tema değişince arkaplanı manifestten yükle (manifest yoksa katman temizlenir)
+function loadThemeBackground(win, id, f) {
+  if (!id) return Promise.resolve(applyBackground(win, null, null));
+  let p;
+  try {
+    p = Promise.resolve(f("/reverse/themes/" + encodeURIComponent(id) + "/manifest.json"));
+  } catch (_) {
+    p = Promise.resolve(null);
+  }
+  return p
+    .then((res) => (res && res.ok && typeof res.json === "function" ? res.json() : null))
+    .catch(() => null)
+    .then((mf) => applyBackground(win, id, mf && typeof mf === "object" ? mf : null));
+}
+
 function themeEngineModule(win, fetchFn) {
   const f = fetchFn || ((...a) => (win.fetch || fetch)(...a));
   return {
@@ -178,7 +238,10 @@ function themeEngineModule(win, fetchFn) {
     async run() {
       const api = win.ReverseSpotify;
       const theme = resolveTheme(win, api && api.settings);
-      if (!theme) return;
+      if (!theme) {
+        applyBackground(win, null, null);
+        return;
+      }
       // 404/ager reddetme: kaçak hata kalıcı disable'a yol açmasın (rs:disabled kalıcıdır)
       let css = null;
       try {
@@ -190,6 +253,7 @@ function themeEngineModule(win, fetchFn) {
         return;
       }
       api.applyTheme(css);
+      await loadThemeBackground(win, theme, f);
     },
   };
 }
@@ -468,12 +532,15 @@ function browserBoot() {
       if (!eff) {
         const el = document.getElementById("rs-theme");
         if (el) el.remove();
+        applyBackground(win, null, null);
         return;
       }
       try {
         const res = await fetch("/reverse/themes/" + encodeURIComponent(eff) + "/theme.css");
-        if (res && res.ok) applyThemeCss(document, await res.text());
-        else api.log("tema css alınamadı:", eff);
+        if (res && res.ok) {
+          applyThemeCss(document, await res.text());
+          await loadThemeBackground(win, eff, (u) => fetch(u));
+        } else api.log("tema css alınamadı:", eff);
       } catch (e) {
         api.log("tema css alınamadı:", eff, e);
       }
@@ -703,14 +770,11 @@ function makeQualityModule(win, api) {
 
 // ---- Panel veri + montaj yardımcıları (pure — panel-ui.test.mjs ile kilitli) ----
 
-const THEME_SWATCHES = {
-  "clean-dark": ["#0e0e10", "#1a1a1c"],
-  amoled: ["#000000", "#0d0d0d"],
-};
-
-function swatchFor(id) {
-  const s = THEME_SWATCHES[String(id == null ? "" : id)];
-  return s ? s.slice() : ["#121212", "#1f1f1f"];
+// Tema renkleri manifestten gelir (config themeMeta) — kodda sabit renk haritası yok.
+function swatchFor(meta, id) {
+  const m = meta && typeof meta === "object" ? meta[String(id == null ? "" : id)] : null;
+  const s = m && Array.isArray(m.swatch) ? m.swatch : null;
+  return s && s.length === 2 ? [String(s[0]), String(s[1])] : ["#121212", "#1f1f1f"];
 }
 
 const UI_LABELS = {
@@ -740,19 +804,19 @@ const PANEL_CSS = [
   // -- buton: fallback (sag alt) + ust bar varyanti --
   "#rs-panel-btn{position:fixed;right:14px;bottom:110px;z-index:99999;width:34px;height:34px;",
   "border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0;",
-  "background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.85);",
+  "background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.14);color:#e63946;",
   "cursor:pointer;transition:background .12s ease,color .12s ease,transform .12s ease}",
-  "#rs-panel-btn:hover{background:rgba(0,0,0,.8);color:#fff;transform:scale(1.05)}",
+  "#rs-panel-btn:hover{background:rgba(0,0,0,.8);color:#ff5a66;transform:scale(1.05)}",
   "#rs-panel-btn.rs-in-topbar{position:static;width:32px;height:32px;flex:none;background:transparent;",
-  "border:0;border-radius:50%;color:rgba(255,255,255,.7)}",
-  "#rs-panel-btn.rs-in-topbar:hover{background:rgba(255,255,255,.1);color:#fff;transform:none}",
+  "border:0;border-radius:50%;color:#e63946}",
+  "#rs-panel-btn.rs-in-topbar:hover{background:rgba(255,255,255,.1);color:#ff5a66;transform:none}",
   // -- overlay + kart --
   "#rs-panel{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;",
   "padding:24px 16px;background:rgba(0,0,0,.7);font:400 13px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;",
   "animation:rs-fade .14s ease-out}",
   "#rs-panel-card{position:relative;display:flex;flex-direction:column;width:min(560px,100%);",
   "max-height:min(660px,86vh);background:#121212;color:#fff;border:1px solid rgba(255,255,255,.08);",
-  "border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.6);overflow:hidden;",
+  "border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.6);overflow:hidden;font-variant-numeric:tabular-nums;",
   "animation:rs-pop .16s cubic-bezier(.2,.8,.3,1)}",
   "@keyframes rs-fade{from{opacity:0}}",
   "@keyframes rs-pop{from{opacity:0;transform:translateY(8px) scale(.97)}}",
@@ -760,8 +824,9 @@ const PANEL_CSS = [
   // -- baslik --
   "#rs-panel-card .rs-head{display:flex;align-items:center;gap:10px;padding:14px 16px;flex:none;",
   "border-bottom:1px solid rgba(255,255,255,.07)}",
-  "#rs-panel-card .rs-mark{flex:none;width:26px;height:26px;border-radius:7px;background:#1ed760;",
-  "color:#000;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}",
+  "#rs-panel-card .rs-mark{flex:none;width:28px;height:28px;border-radius:8px;background:#e63946;",
+  "color:#fff;display:flex;align-items:center;justify-content:center}",
+  "#rs-panel-card .rs-mark svg{width:18px;height:18px}",
   "#rs-panel-card .rs-hgrp{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0}",
   "#rs-panel-card .rs-ttl{font-weight:700;font-size:14px;letter-spacing:.1px}",
   "#rs-panel-card .rs-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#a7a7a7;",
@@ -771,6 +836,20 @@ const PANEL_CSS = [
   "#rs-panel-card .rs-x{margin-left:auto;flex:none;width:32px;height:32px;border:0;border-radius:50%;",
   "background:transparent;color:#a7a7a7;cursor:pointer;display:flex;align-items:center;justify-content:center}",
   "#rs-panel-card .rs-x:hover{background:rgba(255,255,255,.08);color:#fff}",
+  // -- sekmeler (menu) --
+  "#rs-panel-card .rs-tabs{display:flex;gap:4px;padding:8px 12px 0;flex:none;overflow-x:auto;",
+  "border-bottom:1px solid rgba(255,255,255,.07);scrollbar-width:none}",
+  "#rs-panel-card .rs-tabs::-webkit-scrollbar{display:none}",
+  "#rs-panel-card .rs-tab{position:relative;flex:none;border:0;background:transparent;color:#a7a7a7;",
+  "font:600 12.5px/1 system-ui,-apple-system,'Segoe UI',sans-serif;padding:9px 11px 12px;cursor:pointer;",
+  "border-radius:6px 6px 0 0;transition:color .12s ease,background .12s ease}",
+  "#rs-panel-card .rs-tab:hover{color:#eaeaea;background:rgba(255,255,255,.05)}",
+  "#rs-panel-card .rs-tab[aria-selected=true]{color:#fff}",
+  "#rs-panel-card .rs-tab[aria-selected=true]::after{content:'';position:absolute;left:9px;right:9px;bottom:0;",
+  "height:2px;background:#e63946;border-radius:2px 2px 0 0}",
+  // -- panel gorevleri (sekme icerigi) --
+  "#rs-panel-card .rs-pane{display:none}",
+  "#rs-panel-card .rs-pane.on{display:block;animation:rs-fade .14s ease-out}",
   // -- govde + kaydirma --
   "#rs-panel-card .rs-body{flex:1;min-height:0;overflow-y:auto;padding:2px 16px 16px}",
   "#rs-panel-card .rs-body::-webkit-scrollbar{width:8px}",
@@ -785,6 +864,23 @@ const PANEL_CSS = [
   "margin-bottom:6px;background:#181818;border:1px solid rgba(255,255,255,.06);border-radius:8px;",
   "transition:background .1s ease}",
   "#rs-panel-card .rs-row:hover{background:#1e1e1e}",
+  // -- genisletilebilir plugin satiri (alt menu) --
+  "#rs-panel-card .rs-chev{flex:none;width:28px;height:28px;border:0;border-radius:6px;background:transparent;",
+  "color:#8f8f8f;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;",
+  "transition:transform .18s ease,background .12s ease,color .12s ease}",
+  "#rs-panel-card .rs-chev:hover{background:rgba(255,255,255,.08);color:#fff}",
+  "#rs-panel-card .rs-chev[aria-expanded=true]{transform:rotate(90deg);color:#eaeaea}",
+  "#rs-panel-card .rs-tails{display:flex;align-items:center;gap:6px;flex:none}",
+  "#rs-panel-card .rs-wrap{margin-bottom:6px}",
+  "#rs-panel-card .rs-wrap>.rs-row{margin-bottom:0}",
+  "#rs-panel-card .rs-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows .2s ease}",
+  "#rs-panel-card .rs-detail.open{grid-template-rows:1fr}",
+  "#rs-panel-card .rs-detail>div{overflow:hidden;min-height:0}",
+  "#rs-panel-card .rs-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;",
+  "margin-top:6px;background:#141414;border:1px solid rgba(255,255,255,.06);border-radius:8px;",
+  "font-size:11px;color:#a7a7a7}",
+  "#rs-panel-card .rs-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;",
+  "background:#232323;border:1px solid rgba(255,255,255,.12);color:#d7d7d7;font-weight:600}",
   "#rs-panel-card .rs-col{flex:1;min-width:0}",
   "#rs-panel-card .rs-nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;",
   "font-weight:500;color:#eaeaea}",
@@ -807,7 +903,7 @@ const PANEL_CSS = [
   "font-weight:700;background:#fff;color:#000;cursor:pointer;",
   "transition:transform .1s ease,background .1s ease}",
   "#rs-panel-card .rs-btn:hover{background:#f0f0f0;transform:scale(1.04)}",
-  "#rs-panel-card .rs-btn:active{transform:scale(.99)}",
+  "#rs-panel-card .rs-btn:active{transform:scale(.96)}",
   "#rs-panel-card .rs-btn.sec{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.3);",
   "font-weight:500;padding:6px 14px}",
   "#rs-panel-card .rs-btn.sec:hover{background:rgba(255,255,255,.1);border-color:#fff;transform:none}",
@@ -827,14 +923,23 @@ const PANEL_CSS = [
   "font-size:12px;font-weight:600}",
   "#rs-panel-card .rs-lbl .ok{display:none;color:#1ed760}",
   "#rs-panel-card .rs-tcard[aria-pressed=true] .rs-lbl .ok{display:block}",
+  "#rs-panel-card .rs-tcard:active{transform:scale(.98)}",
+  // -- tiklanabilir baglantilar --
+  "#rs-panel-card a.rs-lnk{color:#1ed760;text-decoration:none;border-bottom:1px solid transparent;",
+  "transition:border-color .12s ease,color .12s ease}",
+  "#rs-panel-card a.rs-lnk:hover{border-bottom-color:#1ed760}",
   // -- not + alt bilgi --
   "#rs-panel-card .rs-note{margin:4px 0 0;color:#8f8f8f;font-size:11.5px}",
-  "#rs-panel-card .rs-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;",
-  "flex-wrap:wrap;margin-top:14px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);",
-  "color:#6a6a6a;font-size:11px}",
+  "#rs-panel-card .rs-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;",
+  "flex-wrap:wrap;flex:none;padding:10px 16px;border-top:1px solid rgba(255,255,255,.07);",
+  "color:#6a6a6a;font-size:11px;background:#121212}",
+  "#rs-panel-card .rs-flinks{display:flex;gap:12px;flex-wrap:wrap}",
+  "#rs-panel-card .rs-foot a.rs-lnk{color:#8f8f8f}",
+  "#rs-panel-card .rs-foot a.rs-lnk:hover{color:#1ed760;border-bottom-color:#1ed760}",
   // -- odak + kucuk ekranlar --
   "#rs-panel-btn:focus-visible,.rs-panel-card .rs-sw:focus-visible,.rs-panel-card .rs-btn:focus-visible,",
-  ".rs-panel-card .rs-x:focus-visible,.rs-panel-card .rs-tcard:focus-visible{outline:2px solid #1ed760;",
+  ".rs-panel-card .rs-x:focus-visible,.rs-panel-card .rs-tcard:focus-visible,.rs-panel-card .rs-tab:focus-visible,",
+  ".rs-panel-card .rs-chev:focus-visible,.rs-panel-card a.rs-lnk:focus-visible{outline:2px solid #1ed760;",
   "outline-offset:2px}",
   "@media (max-width:520px){#rs-panel{padding:12px 8px}#rs-panel-card .rs-head{padding:12px}",
   "#rs-panel-card .rs-body{padding:2px 12px 14px}}",
@@ -844,12 +949,14 @@ const PANEL_CSS = [
 function makePanelModule(win, api, registry) {
   const doc = win.document;
   // Profesyonel SVG ikonlar (emoji yasak — AGENTS.md ikon standardı)
-  const GEAR =
-    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
-    'stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' +
-    '<circle cx="12" cy="12" r="3.4"/>' +
-    '<path d="M12 3.2v2.6M12 18.2v2.6M3.2 12h2.6M18.2 12h2.6M5.7 5.7l1.9 1.9' +
-    'M16.4 16.4l1.9 1.9M18.3 5.7l-1.9 1.9M7.6 16.4l-1.9 1.9"/></svg>';
+  // Anka kuşu: fluent-emoji-high-contrast "phoenix-bird" (MIT) — kırmızı chip üzerinde beyaz
+  const PHOENIX_EYE =
+    "M16.079 10.675a.464.464 0 1 1-.928 0a.464.464 0 0 1 .928 0";
+  const PHOENIX_BODY =
+    "M14.33 1.53c.31.89.02 1.89-.73 2.48l-.38.32l.82.59l3.58 2.6c.19.14.37.3.53.47c1.41 1.31 1.82 2.66 1.88 3.9c.77-.88 1.13-2.02 1.1-3.44c-.04-1.95-1.48-3.49-2.68-4.44a2.24 2.24 0 0 1-.73-2.49C18.02.63 18.86.04 19.8.04c2.02 0 4.236 1.52 5.57 2.92c.3-.15.63-.23.98-.23c.69 0 1.35.34 1.77.9c.83 1.13 1.47 2.72 1.85 4.54c.72.22 1.3.81 1.49 1.58c1.18 4.73-.3 8.83-4.08 11.45v.18c0 5.54-4.4 10.18-9.8 10.36h-.08a2.17 2.17 0 0 1-2.12-1.69c-.75-.09-1.52-.27-2.17-.61c-.68-.35-1.1-1.02-1.15-1.75a8 8 0 0 1-2.33-2.59c-.18-.33-.27-.7-.27-1.08c0-.23.04-.45.1-.66c-3.31-.83-6.12-2.61-7.72-4.97C.2 15.98-.23 12.99.58 9.74c.19-.77.76-1.35 1.49-1.58c.38-1.82 1.02-3.41 1.85-4.54c.41-.56 1.08-.9 1.77-.9c.35 0 .68.08.97.23C7.86 1.68 9.53.52 11.78.07c1.108-.176 2.157.352 2.55 1.46m-2 .87c.18-.14.09-.4-.11-.4v.03h-.05c-3.73.75-5.5 4.03-6.07 5.35a.11.11 0 0 1-.1.06c-.06 0-.12-.04-.12-.1v-2.4c0-.13-.1-.22-.21-.22c-.06 0-.12.03-.16.09c-1.08 1.47-1.8 4.1-1.86 6.89c0 .06-.05.09-.1.09c-.03 0-.06-.01-.08-.05a5.2 5.2 0 0 1-.54-1.49a.23.23 0 0 0-.23-.19a.22.22 0 0 0-.21.17c-1.7 6.8 3.213 10.15 7.669 11.23a7.92 7.92 0 0 1-1.576-4.753a7.56 7.56 0 0 1 1.337-4.286c-.63-.991-1.068-2.306-1.03-4.051c.06-2.82 2.03-4.85 3.44-5.97m4.2 21.3h.01c1.28 0 2.47-.344 3.494-.945c-2.531.242-4.807-1.792-4.807-4.364c0-1.092.363-1.958.921-2.638a6 6 0 0 1-.548.037c-.76 0-1.2-.87-.74-1.48l1.56-2.08l1.18.74c.05.03.1.04.15.04c.11 0 .22-.07.22-.19c.09-1.12.06-2.24-1.27-3.44q-.135-.15-.3-.27l-3.58-2.6s0 1.85.93 2.78l-.837 1.015h.005l-1.825 2.22a6.58 6.58 0 0 0-1.51 4.182c0 2.93 1.81 5.475 4.374 6.502a7 7 0 0 0 2.573.491m5.6-1.314a.66.66 0 0 1-.17.834a8.815 8.815 0 0 1-10.07.55a.25.25 0 0 0-.16-.05c-.16 0-.31.12-.31.3q0 .06.03.12c.22.4 1.64 2.79 4.61 2.79c0 0-1 .34-1.87.44c-.16.02-.23.21-.08.29c.65.34 1.75.47 2.73.47c.89 0 1.69-.11 2.01-.27c0 0-.36.72-1.47 1.52c-.15.11-.09.34.09.34c4.32-.15 7.87-3.96 7.87-8.36l-.001-.156c-1.041.53-2.14.918-3.21 1.182m3.653-2.58c2.849-1.787 4.884-4.857 3.697-9.596a.21.21 0 0 0-.21-.17c-.1 0-.2.07-.23.19c-.17.71-.31 1.01-.54 1.49c-.01.03-.05.05-.08.05c-.05 0-.1-.03-.1-.09c-.06-2.79-.78-5.42-1.86-6.89a.19.19 0 0 0-.16-.09c-.11 0-.21.09-.21.22v2.4c0 .06-.06.1-.12.1a.11.11 0 0 1-.1-.06c-.57-1.32-2.34-4.6-6.07-5.35h-.05c-.2 0-.28.26-.11.4c1.41 1.12 3.38 3.15 3.44 5.97c.08 3.34-1.6 5.11-3.04 6.04c-.05.02-.1.05-.15.08a8.6 8.6 0 0 1-1.387.681l.03.011c-1.31.617-2.306 1.614-2.306 3.199c0 1.996 1.797 3.586 3.77 3.363h.005c1.847-.206 3.976-.821 5.781-1.948";
+  const PHOENIX =
+    '<svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">' +
+    '<path d="' + PHOENIX_EYE + '"/><path d="' + PHOENIX_BODY + '"/></svg>';
   const SV = 'viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" ' +
     'stroke-width="1.4" aria-hidden="true"';
   const ICO = {
@@ -880,6 +987,10 @@ function makePanelModule(win, api, registry) {
     info:
       '<svg ' + SV + ' stroke-linecap="round"><circle cx="8" cy="8" r="6.1"/>' +
       '<path d="M8 7.3v3.6M8 5.1v.4"/></svg>',
+    chev:
+      '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M6 3.5L10.5 8L6 12.5"/></svg>',
   };
 
   function closePanel() {
@@ -952,12 +1063,30 @@ function makePanelModule(win, api, registry) {
     return p;
   }
 
-  function themeCard(id, label, selected, onClick) {
+  // Dış bağlantı: CEF'de saf <a target> riskli → preventDefault + win.open
+  function extLink(text, url) {
+    if (!url || typeof url !== "string") return null;
+    const a = doc.createElement("a");
+    a.className = "rs-lnk";
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noreferrer noopener";
+    a.textContent = text;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      try {
+        win.open(url, "_blank");
+      } catch (_) {}
+    });
+    return a;
+  }
+
+  function themeCard(meta, id, label, selected, onClick) {
     const c = doc.createElement("button");
     c.className = "rs-tcard";
     c.type = "button";
     c.setAttribute("aria-pressed", selected ? "true" : "false");
-    const colors = swatchFor(id);
+    const colors = swatchFor(meta, id);
     const prev = doc.createElement("div");
     prev.className = "rs-prev";
     const bs = doc.createElement("div");
@@ -980,14 +1109,16 @@ function makePanelModule(win, api, registry) {
     return c;
   }
 
+  let activeTab = "tema"; // sekme seçimi fill yeniden çizimlerinde korunur
+
   function fill(card) {
     card.innerHTML = "";
-    // ---- Başlık ----
+    // ---- Başlık: kırmızı anka kuşu ----
     const head = doc.createElement("div");
     head.className = "rs-head";
     const mark = doc.createElement("div");
     mark.className = "rs-mark";
-    mark.textContent = "R";
+    mark.innerHTML = PHOENIX;
     const hgrp = doc.createElement("div");
     hgrp.className = "rs-hgrp";
     const ttl = doc.createElement("div");
@@ -1009,8 +1140,42 @@ function makePanelModule(win, api, registry) {
     x.innerHTML = ICO.close;
     x.addEventListener("click", closePanel);
     head.append(mark, hgrp, x);
+
+    // ---- Sekmeler (menü) ----
+    const meta = (api.settings && api.settings.themeMeta) || {};
+    const TABS = [
+      ["tema", "Tema"],
+      ["eklenti", "Eklentiler"],
+      ["temizlik", "Temizlik"],
+      ["arac", "Araçlar"],
+    ];
+    const tabsEl = doc.createElement("div");
+    tabsEl.className = "rs-tabs";
+    tabsEl.setAttribute("role", "tablist");
+    const tabBtns = [];
+    const panes = {};
+    for (const [tid, tlabel] of TABS) {
+      const tb = doc.createElement("button");
+      tb.className = "rs-tab";
+      tb.type = "button";
+      tb.setAttribute("role", "tab");
+      tb.setAttribute("aria-selected", tid === activeTab ? "true" : "false");
+      tb.textContent = tlabel;
+      tb.addEventListener("click", () => {
+        activeTab = tid;
+        for (const [t2, b2] of tabBtns) b2.setAttribute("aria-selected", t2 === tid ? "true" : "false");
+        for (const t2 of Object.keys(panes)) panes[t2].classList.toggle("on", t2 === tid);
+      });
+      tabsEl.appendChild(tb);
+      tabBtns.push([tid, tb]);
+      const pn = doc.createElement("div");
+      pn.className = "rs-pane" + (tid === activeTab ? " on" : "");
+      pn.setAttribute("role", "tabpanel");
+      panes[tid] = pn;
+    }
     const body = doc.createElement("div");
     body.className = "rs-body";
+    for (const t2 of Object.keys(panes)) body.appendChild(panes[t2]);
 
     // ---- Tema ----
     const s1 = section("Tema", ICO.palette);
@@ -1041,21 +1206,21 @@ function makePanelModule(win, api, registry) {
     const grid = doc.createElement("div");
     grid.className = "rs-grid";
     grid.appendChild(
-      themeCard("", "Kapalı (vanilla)", cur === null, async () => {
+      themeCard(meta, "", "Kapalı (vanilla)", cur === null, async () => {
         await api.setTheme("");
         fill(card);
       })
     );
     for (const t of themes) {
       grid.appendChild(
-        themeCard(t, t, cur === t, async () => {
+        themeCard(meta, t, (meta[t] && meta[t].name) || t, cur === t, async () => {
           await api.setTheme(t);
           fill(card);
         })
       );
     }
     s1.appendChild(grid);
-    body.appendChild(s1);
+    panes.tema.appendChild(s1);
 
     // ---- Pluginler ----
     const s2 = section("Pluginler", ICO.apps);
@@ -1064,34 +1229,71 @@ function makePanelModule(win, api, registry) {
     for (const p of plugs) {
       if (!p || typeof p.id !== "string") continue;
       const st = pluginRuntimeState(p, registry);
-      const meta = [
+      const metaLine = [
         p.perfClass,
-        Array.isArray(p.permissions) && p.permissions.length ? p.permissions.join(", ") : null,
+        Array.isArray(p.permissions) && p.permissions.length ? p.permissions.length + " izin" : null,
       ]
         .filter(Boolean)
         .join(" · ");
+      let toggle = null;
+      let state = "";
       if (st === "cli-pasif") {
-        const t = sw(false, null, true);
-        t.title = "CLI ile pasif — plugins enable <id>";
-        s2.appendChild(row(p.id, (meta ? meta + " · " : "") + "CLI pasif", t));
+        toggle = sw(false, null, true);
+        toggle.title = "CLI ile pasif — plugins enable <id>";
+        state = (metaLine ? metaLine + " · " : "") + "CLI pasif";
       } else if (st === "aktif") {
-        s2.appendChild(
-          row(p.id, (meta ? meta + " · " : "") + "açık", sw(true, () => {
-            registry.disable("plugin:" + p.id);
-            fill(card);
-          }))
-        );
+        toggle = sw(true, () => {
+          registry.disable("plugin:" + p.id);
+          fill(card);
+        });
+        state = (metaLine ? metaLine + " · " : "") + "açık";
       } else {
-        s2.appendChild(
-          row(p.id, (meta ? meta + " · " : "") + "kapalı", sw(false, () => {
-            registry.remove("plugin:" + p.id);
-            fill(card);
-          }))
-        );
+        toggle = sw(false, () => {
+          registry.remove("plugin:" + p.id);
+          fill(card);
+        });
+        state = (metaLine ? metaLine + " · " : "") + "kapalı";
       }
+      // Genişletilebilir alt menü: chevron → chips (izinler, sınıf, giriş, depo)
+      const wrap = doc.createElement("div");
+      wrap.className = "rs-wrap";
+      const chev = doc.createElement("button");
+      chev.className = "rs-chev";
+      chev.type = "button";
+      chev.setAttribute("aria-expanded", "false");
+      chev.setAttribute("aria-label", p.id + " detayını göster");
+      chev.innerHTML = ICO.chev;
+      const detail = doc.createElement("div");
+      detail.className = "rs-detail";
+      const dIn = doc.createElement("div");
+      const chips = doc.createElement("div");
+      chips.className = "rs-chips";
+      const mkChip = (txt) => {
+        const c = doc.createElement("span");
+        c.className = "rs-chip";
+        c.textContent = txt;
+        return c;
+      };
+      if (p.perfClass) chips.appendChild(mkChip(p.perfClass));
+      if (Array.isArray(p.permissions)) for (const perm of p.permissions) chips.appendChild(mkChip(String(perm)));
+      if (p.entry) chips.appendChild(mkChip(p.entry));
+      const repoLink = extLink("Depo", p.repo);
+      if (repoLink) chips.appendChild(repoLink);
+      dIn.appendChild(chips);
+      detail.appendChild(dIn);
+      chev.addEventListener("click", () => {
+        const open = detail.classList.toggle("open");
+        chev.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      const tails = doc.createElement("div");
+      tails.className = "rs-tails";
+      tails.append(chev, toggle);
+      wrap.appendChild(row(p.id, state, tails));
+      wrap.appendChild(detail);
+      s2.appendChild(wrap);
     }
     if (plugs.length) s2.appendChild(note("Plugin açma/kapama bir sonraki açılışta geçerlidir."));
-    body.appendChild(s2);
+    panes.eklenti.appendChild(s2);
 
     // ---- Reklam ve UI temizliği ----
     const s3 = section("Reklam ve UI temizliği", ICO.shield);
@@ -1131,7 +1333,7 @@ function makePanelModule(win, api, registry) {
         }))
       );
     }
-    body.appendChild(s3);
+    panes.temizlik.appendChild(s3);
 
     // ---- Kalite ----
     const s4 = section("Kalite seçenekleri", ICO.wave);
@@ -1146,7 +1348,7 @@ function makePanelModule(win, api, registry) {
         })
       )
     );
-    body.appendChild(s4);
+    panes.arac.appendChild(s4);
 
     // ---- Bilgi ----
     const s5 = section("Bilgi", ICO.info);
@@ -1171,17 +1373,27 @@ function makePanelModule(win, api, registry) {
     s5.appendChild(
       note("Genel sıfırlama: localStorage.removeItem('rs:disabled') · CLI: python -m reversespotify status")
     );
+    panes.arac.appendChild(s5);
+
+    // ---- Ayak: tıklanabilir bağlantılar (config links — hardcoded URL yok) ----
     const foot = doc.createElement("div");
     foot.className = "rs-foot";
     const f1 = doc.createElement("span");
     f1.textContent = "ReverseSpotify · aegisSoft · MrSpy00";
-    const f2 = doc.createElement("span");
-    f2.textContent = "github.com/MrSpy00/ReverseSpotify";
-    foot.append(f1, f2);
-    s5.appendChild(foot);
-    body.appendChild(s5);
+    const fl = doc.createElement("span");
+    fl.className = "rs-flinks";
+    const links = (api.settings && api.settings.links) || {};
+    for (const [label, url] of [
+      ["GitHub", links.repo || api.settings.repo],
+      ["aegisSoft", links.site],
+      ["MrSpy00", links.author],
+    ]) {
+      const a = extLink(label, url);
+      if (a) fl.appendChild(a);
+    }
+    foot.append(f1, fl);
 
-    card.append(head, body);
+    card.append(head, tabsEl, body, foot);
   }
 
   function openPanel() {
@@ -1223,7 +1435,7 @@ function makePanelModule(win, api, registry) {
         btn.type = "button";
         btn.title = "ReverseSpotify paneli (Ctrl+Shift+,)";
         btn.setAttribute("aria-label", "ReverseSpotify kontrol paneli");
-        btn.innerHTML = GEAR;
+        btn.innerHTML = PHOENIX;
         btn.addEventListener("click", toggle);
         (doc.body || doc.documentElement).appendChild(btn);
       }
@@ -1303,6 +1515,8 @@ if (typeof module !== "undefined" && module.exports) {
     pickChunkGlobal,
     candidateModules,
     applyThemeCss,
+    applyBackground,
+    loadThemeBackground,
     themeEngineModule,
     makePluginApi,
     runPlugins,

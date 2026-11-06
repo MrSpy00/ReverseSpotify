@@ -110,4 +110,4 @@ def test_config_lists_available_themes(fake_apps):
     assert cli.main(["install", "--yes", "--spotify-dir", str(fake_apps)]) == 0
     entries = spa.read_spa(fake_apps / "xpui.spa")
     cfg = json.loads(entries["reverse/config.json"])
-    assert cfg.get("themes") == ["amoled", "clean-dark"]
+    assert cfg.get("themes") == ["amber", "amoled", "clean-dark", "crimson", "forest", "lavender", "nord", "ocean"]

@@ -1,0 +1,8 @@
+{
+  "id": "ocean",
+  "name": "Deep Ocean",
+  "author": "aegisSoft",
+  "version": "1.0.0",
+  "entryCss": "theme.css",
+  "swatch": ["#0b1017", "#131c28"]
+}

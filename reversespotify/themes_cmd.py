@@ -1,7 +1,8 @@
 """Tema dizini tarama ve manifest doğrulama.
 
-Manifest şeması: {"id","name","author","version","entryCss"}.
-id ve entryCss zip giriş yolu üretiminde kullanılır → katı doğrulama (path traversal yok).
+Manifest şeması: {"id","name","author","version","entryCss"} + isteğe bağlı
+{"swatch":[#hex,#hex], "background":dosya, "backgroundVideo":dosya}.
+id/entryCss/asset zip giriş yolu üretiminde kullanılır → katı doğrulama (path traversal yok).
 """
 
 import json
@@ -12,6 +13,8 @@ THEMES_ROOT = Path(__file__).resolve().parent.parent / "themes"
 _REQUIRED = ("id", "name", "author", "version", "entryCss")
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _ENTRY_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
+_ASSET_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")  # dizin ayracı YOK (traversal yok)
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def list_themes(root: Path | None = None) -> list[dict]:
@@ -36,6 +39,19 @@ def list_themes(root: Path | None = None) -> list[dict]:
             raise ValueError(f"geçersiz manifest {mf}: id '{data['id']}' dizin adıyla uyuşmuyor")
         if not isinstance(data["entryCss"], str) or not _ENTRY_RE.match(data["entryCss"]):
             raise ValueError(f"geçersiz manifest {mf}: entryCss '{data.get('entryCss')}' güvenli değil")
+        if "swatch" in data:
+            sw = data["swatch"]
+            if (
+                not isinstance(sw, list)
+                or len(sw) != 2
+                or any(not isinstance(c, str) or not _COLOR_RE.match(c) for c in sw)
+            ):
+                raise ValueError(f"geçersiz manifest {mf}: swatch {sw!r} güvenli değil")
+        for key in ("background", "backgroundVideo"):
+            if key in data:
+                val = data[key]
+                if not isinstance(val, str) or not _ASSET_RE.match(val) or not (d / val).is_file():
+                    raise ValueError(f"geçersiz manifest {mf}: {key} {val!r} güvenli değil veya dosya yok")
         out.append(data)
     return out
 

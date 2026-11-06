@@ -1,0 +1,8 @@
+{
+  "id": "remaining-time",
+  "name": "Remaining Time",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "permissions": ["ui"],
+  "perfClass": "light"
+}

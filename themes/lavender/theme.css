@@ -1,0 +1,16 @@
+/* ReverseSpotify — Lavender Haze: yumuşak mor-gri sis.
+ * Yalnız encore base-set değişkenleri (variant setlere dokunulmaz — mirror-safe). */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-base: #11101a;
+  --background-highlight: #191726;
+  --background-press: #0a0912;
+  --background-elevated-base: #1c1a2a;
+  --background-elevated-highlight: #252235;
+  --background-elevated-press: #14121f;
+  --background-tinted-base: #ffffff14;
+  --background-tinted-highlight: #ffffff20;
+  --background-tinted-press: #ffffff30;
+  --text-subdued: #a6a2bb;
+  --decorative-subdued: #252235;
+}
