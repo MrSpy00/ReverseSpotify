@@ -1,67 +1,96 @@
-# PROJECT.md — ReverseSpotify
+# ReverseSpotify — PROJECT.md
 
 ## Kimlik
 
 | Alan | Değer |
-| :--- | :--- |
+| --- | --- |
 | Şirket | aegisSoft |
 | Baş Geliştirici | mrSpy |
-| Paket | `com.aegissoft.reversespotify` |
+| Paket / Namespace | `com.aegissoft.reversespotify` |
 | GitHub | https://github.com/MrSpy00/ReverseSpotify |
-| Hedef Platform | Windows x64 — Spotify Desktop `1.3.8.620` (`%APPDATA%\Spotify`) |
-| Stack | Python 3.14 (CLI/motor) + Vanilla JS (loader/tema/plugin) |
+| Hedef | Spotify Desktop **1.3.8.620** (`%APPDATA%\Spotify`) — Windows x64 |
+| Stack | Python 3.14 (CLI/yama/izleyici) + saf JS loader (runtime) |
+| Test | `python -m pytest -q` (40) · `node --test "tests/js/*.test.mjs"` (21) |
 
-## Ne Yapar
+## Ne yapar
 
-Spicetify bağımsız, sürüm-agnostik bağımsız mod motoru: `Apps\xpui.spa`
-(standart ZIP) içine `index.html` → `reverse-loader.js` enjeksiyonu ile
-tema motoru, denetimli plugin sistemi, ad-block, UI overhaul ve kalite
-reveal (premium bypass YOK — ToS sınırı) sunar; güncelleme sonrası
-otomatik iyileşme (watch/heal) sağlar.
+Spotify'ı değiştirmeden (orijinal dosyalar korunarak) **kendi mod motorumuzla** tema,
+plugin, ad-block, UI temizliği ve kalite-reveal ekler. Spicetify bağımlılığı **yok**,
+sürüm-agnostik loader, güncelleme sonrası **otomatik onarım**. Premium bypass **yok**
+(ToS sınırı; kalite yalnızca reveal-only).
 
-## Mimari Harita
+## Mimari Haritası
 
 ```
-reversespotify/
-  spa.py        xpui.spa okuma/yazma/sha256
-  patch.py      inject_loader/has_loader (idempotent, T2)
-  config.py     data_root/spotify_apps_dir (T3)
-  process.py    spotify_running/kill/wait (T3)
-  cli.py        install|restore|status|themes|plugins|watch (T3+)
-  loader/       reverse-loader.js + boot API (T4-7)
-  themes/       clean-dark, amoled (T5)
-  plugins/      key-highlight örneği + lint (T6)
-tests/          pytest + node:test, fixtures/index.html (gerçek1.3.8.620)
-tools/          spike_repack.py (Faz0 spike, throwaway)
+reversespotify/          CLI + repack motoru
+  spa.py                 xpui.spa okuma/yazma/sha256
+  patch.py               inject_loader/has_loader (index.html → /reverse-loader.js)
+  config.py              data_root (%APPDATA%\ReverseSpotify), spotify_apps_dir
+  process.py             spotify_running/wait/kill/start (taskkill)
+  cli.py                 install · restore · status · themes · plugins · watch
+  themes_cmd.py          tema manifest doğrulama + list/set
+  plugins_cmd.py         manifest doğrulama, GitHub fetch (yalnız github.com), lint
+  lint.py                performans bütçesi (hard-fail: observer-throttle,
+                         <100ms interval, backdrop-filter, sync querySelectorAll döngüsü)
+  watch.py               check_and_heal → ok|healed|vanilla|broken + sürüm pristine
+loader/
+  reverse-loader.js      tek dosya IIFE runtime: boot izolasyonu, rspack/webpack
+                         feature-detection, window.ReverseSpotify API, tema motoru,
+                         plugin runner (izinli facade), adblock/ui-overhaul/quality
+themes/                  clean-dark, amoled (encore CSS variable override)
+plugins/                 key-highlight (örnek, perfClass light)
+registry.json            yerel plugin kayıt defteri
+tools/                   discover*.py (keşif), spike_repack.py (Faz0), cdp_smoke.py (CDP)
+docs/                    specs/ plans/ xpui-findings.md usage.md
 ```
 
 ## Uygulanan Algoritmalar / Güvenlik
 
-- **Faz0 spike DOĞRULANDI:** gerçek spa'ye marker enjeksiyon → repack →
-  Spotify15 sn ayakta → bayt-tamam restore (sha256 eşit).
-- Pristine yedek asla ezilmez (`Backup/xpui.spa.pristine`).
-- Plugin lint: MutationObserver-throttle / setInterval<100ms /
-  backdrop-filter / sync döngü → hard-fail (performans bütçesi).
-- ToS sınırı: premium bypass / kalite yükselteci YOK (sadece UI reveal).
-- Spicetify bağımlılığı ve Spicetify.* shim'i v1'de YOK.
+- **Repack:** `xpui.spa` (standart ZIP) → `index.html` xpui script'inin ÖNCESİNE loader
+  etiketi → `reverse-loader.js` + `reverse/config.json` + tema CSS + plugin girişleri
+  paketlenir. İdempotent (çift enjeksiyon yok).
+- **Pristine:** `Backup/xpui.spa.pristine` asla ezilmez; yeni sürümler için ayrı
+  `xpui.spa.pristine.<version>` (watch heal sırasında, vanilla bayttan).
+- **Marker:** `data/reverse.json` = `{hash, version}` — status/watch sağlık kontrolü.
+- **Auto-heal:** `watch.py` — hash drift VEYA loader kaybı (güncelleme) VEYA prefs sürüm
+  değişimi → otomatik `install --yes` (Spotify kapalıysa bekle/kapat, sonra başlat).
+- **Plugin izolasyonu:** her plugin kendi try/catch'inde; çökertirse `rs:disabled` +
+  `rs:error` (kalıcı disable, oturum yeniden yüklenmez).
+- **Kalite reveal-only:** yalnızca DOM'daki `disabled` option serbest bırakılır;
+  entitlement/`maxSupportedQuality`/option üretimine dokunulmaz (test ile kilitli).
+- **Ad-block:** 39 gerçek `data-testid` CSS hide katmanı; ses-hook yok → dürüst
+  `mode=ui-only` (docs/xpui-findings.md §2).
 
-## Derleme & Kurulum
+## Derleme & Kurulum (tek komut)
 
 ```powershell
-# Kurulum (Spotify kapalı olmalı)
-python -m reversespotify install --yes
-# Varsayılana dönüş
-python -m reversespotify restore
-# Durum
-python -m reversespotify status
-# Test
-python -m pytest -q ; node --test tests/js/
+cd "X:\mrspy\Reverse Engineering\Projeler\ReverseSpotify"
+python -m reversespotify install --yes      # mod kur (Spotify'ı kapatır/açar)
+python -m reversespotify status             # 0=modded-sağlıklı 1=bozuk 2=vanilla
+python -m reversespotify restore --yes      # orijinal baytlara dön
+python -m reversespotify watch --once       # tek sağlık+tarama
+python -m reversespotify watch --install-task  # ReverseSpotifyHeal (logon+günlük)
 ```
 
-## Yol Haritası
+## Spike Sonuçları (Faz 0)
 
-1. Faz1 (T2-T4): enjeksiyon + CLI + loader çekirdeği
-2. Faz2 (T5-T7): tema + plugin + ad-block/UI/quality modülleri
-3. Faz3 (T8-T9): auto-heal watcher + tam akış doğrulama
-4. Sonrası: Windows UI ayarlayıcı (Tauri/WinUI), tema galerisi, GitHub
-   kaynaklı denetli plugin havuzu yayını
+- Repack round-trip: gerçek spa marker→repack→Spotify 15sn ayakta→sha256 restore eşit.
+- Spotify 1.3.8 = **rspack** (`rspackChunk*`, `req.c` yok); modül tespiti fabrika kaynak
+  taraması + require(id) doğrulama; React bulunur, Platform/Router fallback (v1 plain DOM).
+- CDP doğrulama: `python tools/cdp_smoke.py "<js>" [shot.png]` (port 9222).
+
+## Test & Doğrulama
+
+```powershell
+python -m pytest -q                                        # 40 passed
+node --test "tests/js/*.test.mjs"                          # 21 passed
+python tools/cdp_smoke.py "(async()=>JSON.stringify(window.ReverseSpotify.modules))()"
+```
+
+## Roadmap
+
+- v2: `Spicetify.Platform/React` uyumluluk shim'i (topluluk plugin uyumu).
+- v2: ağ katmanı ile sesli-reklam (`ui+audio` modu) — ToS değerlendirmesiyle.
+- v2: `plugins add` için imza/namespace doğrulama (harici registry).
+- Restore'un sürüm-pristine seçimi (post-update tam vanilla geri dönüş).
+- macOS/Linux yok (yalnız Windows).

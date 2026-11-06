@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import config, patch, plugins_cmd, process, spa, themes_cmd
+from . import config, patch, plugins_cmd, process, spa, themes_cmd, watch
 
 LOADER_SOURCE = Path(__file__).resolve().parent.parent / "loader" / "reverse-loader.js"
 THEMES_ROOT = themes_cmd.THEMES_ROOT
@@ -106,7 +106,10 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET) -> None:
 
     marker = _marker_path()
     marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(json.dumps({"hash": spa.spa_hash(spa_path)}), encoding="utf-8")
+    marker.write_text(
+        json.dumps({"hash": spa.spa_hash(spa_path), "version": watch.spotify_version(apps)}),
+        encoding="utf-8",
+    )
 
 
 def cmd_install(args: argparse.Namespace) -> int:
@@ -373,6 +376,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--check", action="store_true")
     p.set_defaults(func=cmd_status)
 
+    p = sub.add_parser("watch")
+    p.add_argument("--spotify-dir", default=None)
+    p.add_argument("--once", action="store_true")  # tek kontrol (varsayılan davranış)
+    p.add_argument("--install-task", action="store_true")
+    p.set_defaults(func=cmd_watch)
+
     # bayraklar yalnızca leaf parser'da: parent'ta olsaydı set'in varsayılanı
     # parent'taki değeri clobber ederdi (argparse nested dest klasik tuzağı)
     p = sub.add_parser("themes")
@@ -404,6 +413,47 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    if getattr(args, "install_task", False):
+        return cmd_watch_install_task()
+    result = watch.check_and_heal(args.spotify_dir)
+    print(f"watch: {result}")
+    return {"ok": 0, "healed": 0, "vanilla": 2, "broken": 1}[result]
+
+
+def cmd_watch_install_task() -> int:
+    """Yol bağımsız planlayıcı: runtime'da çözülmüş yollarla wrapper bat üretir."""
+    import subprocess
+
+    root = Path(__file__).resolve().parent.parent
+    py = sys.executable
+    bat = config.data_root() / "watch-once.bat"
+    bat.parent.mkdir(parents=True, exist_ok=True)
+    bat.write_text(
+        f'@echo off\r\ncd /d "{root}"\r\n"{py}" -m reversespotify watch --once\r\n',
+        encoding="utf-8",
+    )
+    ok = True
+    for name, *sched in (
+        ("ReverseSpotifyHeal", "/SC", "ONLOGON"),
+        ("ReverseSpotifyHealDaily", "/SC", "DAILY", "/ST", "13:00"),
+    ):
+        r = subprocess.run(
+            ["schtasks", "/Create", "/TN", name, "/TR", f'"{bat}"', *sched, "/F"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if r.returncode != 0:
+            print(f"hata: {name}: {(r.stderr or r.stdout).strip()}")
+            ok = False
+    if not ok:
+        return 1
+    print("görev kuruldu: ReverseSpotifyHeal (logon + günlük)")
+    return 0
 
 
 if __name__ == "__main__":
