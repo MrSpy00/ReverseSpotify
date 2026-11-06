@@ -1,0 +1,8 @@
+{
+  "id": "key-highlight",
+  "name": "Key Highlight",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "permissions": ["ui"],
+  "perfClass": "light"
+}

@@ -1,0 +1,8 @@
+{
+  "plugins": [
+    {
+      "id": "key-highlight",
+      "repo": "https://github.com/MrSpy00/ReverseSpotify"
+    }
+  ]
+}

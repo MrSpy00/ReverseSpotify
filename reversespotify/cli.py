@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import config, patch, process, spa, themes_cmd
+from . import config, patch, plugins_cmd, process, spa, themes_cmd
 
 LOADER_SOURCE = Path(__file__).resolve().parent.parent / "loader" / "reverse-loader.js"
 THEMES_ROOT = themes_cmd.THEMES_ROOT
@@ -35,10 +35,26 @@ def _marker_path() -> Path:
     return config.data_root() / "data" / "reverse.json"
 
 
-def _repack(apps: Path, set_theme=_UNSET) -> None:
-    """Tek repack akışı: pristine yakala → enjekte et → config/temaları yaz → marker tazele.
+def _load_cfg(entries: dict[str, bytes]) -> dict:
+    cfg = {"theme": None, "plugins": []}
+    if "reverse/config.json" in entries:
+        try:
+            parsed = json.loads(entries["reverse/config.json"])
+            if isinstance(parsed, dict):
+                cfg = {**cfg, **parsed}
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass  # bozuk config → varsayılana düş
+    cfg.setdefault("theme", None)
+    cfg.setdefault("plugins", [])
+    if not isinstance(cfg["plugins"], list):
+        cfg["plugins"] = []
+    return cfg
 
-    install ve themes set bu fonksiyonu paylaşır; pristine asla ezilmez.
+
+def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET) -> None:
+    """Tek repack akışı: pristine yakala → enjekte et → config/tema/plugin yaz → marker tazele.
+
+    install, themes set ve plugins komutları bu fonksiyonu paylaşır; pristine asla ezilmez.
     """
     spa_path = apps / "xpui.spa"
 
@@ -54,16 +70,11 @@ def _repack(apps: Path, set_theme=_UNSET) -> None:
     entries["index.html"] = patch.inject_loader(html).encode("utf-8")
     entries["reverse-loader.js"] = LOADER_SOURCE.read_bytes()
 
-    cfg = {"theme": None, "plugins": []}
-    if "reverse/config.json" in entries:
-        try:
-            parsed = json.loads(entries["reverse/config.json"])
-            if isinstance(parsed, dict):
-                cfg = {**cfg, **parsed}
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass  # bozuk config → varsayılana düş
+    cfg = _load_cfg(entries)
     if set_theme is not _UNSET:
         cfg["theme"] = set_theme
+    if set_plugins is not _UNSET:
+        cfg["plugins"] = set_plugins
     entries["reverse/config.json"] = json.dumps(cfg).encode("utf-8")
 
     # tema CSS'lerini paketle; diskte olmayan eski reverse/themes/* girişlerini at
@@ -76,6 +87,18 @@ def _repack(apps: Path, set_theme=_UNSET) -> None:
         wanted.add(entry)
         entries[entry] = src.read_bytes()
     for stale in [k for k in entries if k.startswith("reverse/themes/") and k not in wanted]:
+        del entries[stale]
+
+    # plugin girişlerini paketle (config'teki id/entry üzerinden); bayatları at
+    for p in cfg["plugins"]:
+        if not isinstance(p, dict) or not isinstance(p.get("id"), str):
+            continue
+        entry = f"reverse/plugins/{p['id']}/{p.get('entry', 'index.js')}"
+        src = plugins_cmd.plugins_root() / p["id"] / p.get("entry", "index.js")
+        if src.exists():
+            wanted.add(entry)
+            entries[entry] = src.read_bytes()
+    for stale in [k for k in entries if k.startswith("reverse/plugins/") and k not in wanted]:
         del entries[stale]
 
     spa.write_spa(entries, spa_path)
@@ -146,6 +169,13 @@ def cmd_status(args: argparse.Namespace) -> int:
         print("durum: bozuk (hash uyuşmazlığı — spa değişmiş)")
         return 1
     print("durum: modded — sağlıklı")
+    cfg = _load_cfg(entries)
+    if cfg["theme"]:
+        print(f"tema: {cfg['theme']}")
+    for p in cfg["plugins"]:
+        if isinstance(p, dict) and "id" in p:
+            state = "aktif" if p.get("enabled", True) else "pasif"
+            print(f"plugin: {p['id']} ({state})")
     return 0
 
 
@@ -178,6 +208,139 @@ def cmd_themes_set(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_cfg(apps: Path) -> dict:
+    return _load_cfg(spa.read_spa(apps / "xpui.spa"))
+
+
+def cmd_plugins_list(args: argparse.Namespace) -> int:
+    apps = config.spotify_apps_dir(args.spotify_dir)
+    installed: dict[str, dict] = {}
+    if (apps / "xpui.spa").exists():
+        try:
+            for p in _read_cfg(apps)["plugins"]:
+                if isinstance(p, dict) and "id" in p:
+                    installed[p["id"]] = p
+        except Exception:  # noqa: BLE001 — bozuk config listeyi düşürmesin
+            pass
+    seen = set()
+    for mf in plugins_cmd.list_repo_plugins():
+        seen.add(mf["id"])
+        p = installed.get(mf["id"])
+        if p is None:
+            state = "kurulu degil"
+        else:
+            state = "aktif" if p.get("enabled", True) else "pasif"
+        print(f"{mf['id']:<16} [{state}]  {mf['name']} ({mf['perfClass']})")
+    for pid, p in installed.items():
+        if pid not in seen:
+            state = "aktif" if p.get("enabled", True) else "pasif"
+            print(f"{pid:<16} [{state}]  (kaynak dizini yok)")
+    print(
+        "not: çalışma zamanı devre-dışı kayıtları tarayıcıdadır "
+        "(localStorage rs:disabled/rs:error, konsol: [ReverseSpotify])"
+    )
+    return 0
+
+
+def cmd_plugins_add(args: argparse.Namespace) -> int:
+    try:
+        info = plugins_cmd.resolve_add(args.ref)
+        violations = plugins_cmd.lint_bytes(info["src"])
+        if violations:
+            print("lint RED (hard-fail, --force bile geçemez):")
+            for v in violations:
+                print(f"  - {v}")
+            return 1
+    except ValueError as exc:
+        print(f"hata: {exc}")
+        return 1
+
+    apps = config.spotify_apps_dir(args.spotify_dir)
+    if not (apps / "xpui.spa").exists():
+        print(f"hata: {apps / 'xpui.spa'} bulunamadı")
+        return 1
+    cfg = _read_cfg(apps)
+    pid = info["manifest"]["id"]
+    exists = any(isinstance(p, dict) and p.get("id") == pid for p in cfg["plugins"])
+    if exists and not args.force:
+        print(f"hata: {pid} zaten kurulu (yeniden kurmak için --force)")
+        return 1
+
+    plugins_cmd.save_plugin(info["manifest"], info["src"])
+    rest = [p for p in cfg["plugins"] if not (isinstance(p, dict) and p.get("id") == pid)]
+    new_list = rest + [
+        {
+            "id": pid,
+            "enabled": True,
+            "entry": info["manifest"]["entry"],
+            "permissions": info["manifest"]["permissions"],
+        }
+    ]
+    _ensure_spotify_closed(args.yes)
+    _repack(apps, set_plugins=new_list)
+    process.start_spotify(apps.parent / "Spotify.exe")
+    print(f"plugin eklendi: {pid}")
+    return 0
+
+
+def _plugins_mutate(args: argparse.Namespace, mutate) -> int:
+    """mutate(cfg) → yeni plugins listesi döndürür; ValueError → hata mesajı + exit 1."""
+    apps = config.spotify_apps_dir(args.spotify_dir)
+    if not (apps / "xpui.spa").exists():
+        print(f"hata: {apps / 'xpui.spa'} bulunamadı")
+        return 1
+    try:
+        cfg = _read_cfg(apps)
+        new_list = mutate(cfg)
+    except ValueError as exc:
+        print(f"hata: {exc}")
+        return 1
+    _ensure_spotify_closed(args.yes)
+    _repack(apps, set_plugins=new_list)
+    process.start_spotify(apps.parent / "Spotify.exe")
+    return 0
+
+
+def _find_pid(cfg, pid):
+    for i, p in enumerate(cfg["plugins"]):
+        if isinstance(p, dict) and p.get("id") == pid:
+            return i
+    raise ValueError(f"plugin kurulu değil: {pid}")
+
+
+def cmd_plugins_remove(args: argparse.Namespace) -> int:
+    def mutate(cfg):
+        i = _find_pid(cfg, args.id)
+        out = list(cfg["plugins"])
+        out.pop(i)
+        print(f"plugin kaldırıldı: {args.id}")
+        return out
+
+    return _plugins_mutate(args, mutate)
+
+
+def cmd_plugins_disable(args: argparse.Namespace) -> int:
+    def mutate(cfg):
+        i = _find_pid(cfg, args.id)
+        out = [dict(p) for p in cfg["plugins"]]
+        out[i]["enabled"] = False
+        print(f"plugin pasif: {args.id}")
+        return out
+
+    return _plugins_mutate(args, mutate)
+
+
+def cmd_plugins_enable(args: argparse.Namespace) -> int:
+    def mutate(cfg):
+        i = _find_pid(cfg, args.id)
+        out = [dict(p) for p in cfg["plugins"]]
+        out[i]["enabled"] = True
+        print(f"plugin aktif: {args.id}")
+        return out
+
+    return _plugins_mutate(args, mutate)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="reverse-spotify")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -206,6 +369,24 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--spotify-dir", default=None)
     ps.add_argument("--yes", action="store_true")
     ps.set_defaults(func=cmd_themes_set)
+
+    p = sub.add_parser("plugins")
+    plsub = p.add_subparsers(dest="plugins_cmd", required=True)
+    pl = plsub.add_parser("list")
+    pl.add_argument("--spotify-dir", default=None)
+    pl.set_defaults(func=cmd_plugins_list)
+    pa = plsub.add_parser("add")
+    pa.add_argument("ref")
+    pa.add_argument("--force", action="store_true")
+    pa.add_argument("--spotify-dir", default=None)
+    pa.add_argument("--yes", action="store_true")
+    pa.set_defaults(func=cmd_plugins_add)
+    for leaf, fn in (("remove", cmd_plugins_remove), ("enable", cmd_plugins_enable), ("disable", cmd_plugins_disable)):
+        plv = plsub.add_parser(leaf)
+        plv.add_argument("id")
+        plv.add_argument("--spotify-dir", default=None)
+        plv.add_argument("--yes", action="store_true")
+        plv.set_defaults(func=fn)
 
     args = parser.parse_args(argv)
     return args.func(args)

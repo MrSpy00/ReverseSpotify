@@ -149,6 +149,188 @@ function themeEngineModule(win, fetchFn) {
   };
 }
 
+// ---- Plugin runner (T6) ----
+
+function makePluginApi(api, registry, id, perms, storage) {
+  const name = "plugin:" + id;
+  const has = (p) => Array.isArray(perms) && perms.indexOf(p) !== -1;
+
+  function record(e) {
+    try {
+      registry && registry.disable && registry.disable(name);
+    } catch (_) {}
+    try {
+      storage &&
+        storage.setItem(
+          "rs:error",
+          JSON.stringify({ plugin: id, error: String(e), at: Date.now() })
+        );
+    } catch (_) {}
+    if (typeof console !== "undefined") {
+      console.error("[ReverseSpotify] plugin hatası:", id, e);
+    }
+  }
+
+  let styleSeq = 0;
+  const facade = {
+    get React() {
+      return api.React;
+    },
+    get Platform() {
+      return api.Platform;
+    },
+    get Router() {
+      return api.Router;
+    },
+    log: (...a) => console.log("[ReverseSpotify][plugin:" + id + "]", ...a),
+    onReady(cb) {
+      api.onReady((a) => {
+        try {
+          cb(a);
+        } catch (e) {
+          record(e);
+        }
+      });
+    },
+    onRouteChange(cb) {
+      api.onRouteChange((loc) => {
+        try {
+          cb(loc);
+        } catch (e) {
+          record(e);
+        }
+      });
+    },
+  };
+
+  if (has("settings")) {
+    facade.settings = {
+      get: (k) => api.settings[k],
+      set: (k, v) => {
+        api.settings[k] = v;
+      },
+    };
+  }
+  if (has("ui")) {
+    facade.UI = {
+      addStyle(css, styleId) {
+        const doc = document;
+        const id2 = styleId || "rs-style-" + id + "-" + ++styleSeq;
+        let el = doc.getElementById(id2);
+        if (!el) {
+          el = doc.createElement("style");
+          el.id = id2;
+          (doc.head || doc.documentElement).appendChild(el);
+        }
+        el.textContent = css;
+        return id2;
+      },
+      modal(opts) {
+        const doc = document;
+        facade.UI.addStyle(
+          ".rs-modal-back{position:fixed;inset:0;background:#000000aa;z-index:999998;display:flex;align-items:center;justify-content:center}" +
+            ".rs-modal-panel{background:#181818;color:#fff;border-radius:10px;padding:18px 20px;min-width:280px;max-width:440px;box-shadow:0 8px 30px #0009}" +
+            ".rs-modal-title{font:700 16px/1.3 system-ui,sans-serif;margin-bottom:8px}" +
+            ".rs-modal-body{font:400 14px/1.5 system-ui,sans-serif;color:#b3b3b3;white-space:pre-wrap}" +
+            ".rs-modal-panel button{margin-top:14px;background:#fff;color:#000;border:0;border-radius:999px;padding:8px 18px;font:600 13px system-ui,sans-serif;cursor:pointer}",
+          "rs-modal-style"
+        );
+        const back = doc.createElement("div");
+        back.className = "rs-modal-back";
+        const panel = doc.createElement("div");
+        panel.className = "rs-modal-panel";
+        const title = doc.createElement("div");
+        title.className = "rs-modal-title";
+        title.textContent = (opts && opts.title) || "";
+        const body = doc.createElement("div");
+        body.className = "rs-modal-body";
+        if (opts && opts.body) body.textContent = String(opts.body);
+        const btn = doc.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Kapat";
+        panel.appendChild(title);
+        panel.appendChild(body);
+        panel.appendChild(btn);
+        back.appendChild(panel);
+        const close = () => {
+          try {
+            back.remove();
+          } catch (_) {}
+        };
+        btn.addEventListener("click", close);
+        back.addEventListener("click", (e) => {
+          if (e.target === back) close();
+        });
+        (doc.body || doc.documentElement).appendChild(back);
+        return { close };
+      },
+    };
+  }
+  facade._record = record;
+  return facade;
+}
+
+async function runPlugins(api, registry, list, fetchFn, storage) {
+  const out = { ok: [], failed: [], skipped: [] };
+  const f = fetchFn || ((...a) => globalThis.fetch(...a));
+  const fail = (name, e, pid) => {
+    try {
+      registry && registry.disable && registry.disable(name);
+    } catch (_) {}
+    try {
+      storage &&
+        storage.setItem(
+          "rs:error",
+          JSON.stringify({ plugin: pid, error: String(e), at: Date.now() })
+        );
+    } catch (_) {}
+    if (typeof console !== "undefined") {
+      console.error("[ReverseSpotify] plugin patladı:", pid, e);
+    }
+    out.failed.push(pid);
+  };
+
+  for (const p of list || []) {
+    if (!p || typeof p.id !== "string") continue;
+    const name = "plugin:" + p.id;
+    if (p.enabled === false) {
+      out.skipped.push(p.id);
+      continue;
+    }
+    try {
+      if (registry && registry.isDisabled && registry.isDisabled(name)) {
+        out.skipped.push(p.id);
+        continue;
+      }
+    } catch (_) {
+      out.skipped.push(p.id);
+      continue;
+    }
+    let src;
+    try {
+      const res = await f(
+        "/reverse/plugins/" + encodeURIComponent(p.id) + "/" + encodeURIComponent(p.entry || "index.js")
+      );
+      if (!res || !res.ok) throw new Error("http " + (res ? res.status : "yok"));
+      src = await res.text();
+    } catch (e) {
+      fail(name, e, p.id);
+      continue;
+    }
+    try {
+      const fn = new Function(
+        "ReverseSpotify",
+        src + "\n//# sourceURL=reverse-plugin:" + p.id + ".js"
+      );
+      fn(makePluginApi(api, registry, p.id, p.permissions || [], storage));
+      out.ok.push(p.id);
+    } catch (e) {
+      fail(name, e, p.id);
+    }
+  }
+  return out;
+}
+
 function detectModules(req, api) {
   // rspack: require.cache (.c) yok → fabrika kaynak taraması + require ile şekil doğrulama.
   // require(id) yan etkileri olabilir: aynı id ASLA iki kez denenmez (api._tried).
@@ -301,7 +483,10 @@ function browserBoot() {
     api.modules = bootModules(
       [
         { name: "theme-engine", ...themeEngineModule(win) },
-        { name: "plugins", run() {} },
+        {
+          name: "plugins",
+          run: () => runPlugins(api, registry, api.settings.plugins || [], null, win.localStorage),
+        },
         { name: "adblock", run() {} },
         { name: "ui-overhaul", run() {} },
         { name: "quality", run() {} },
@@ -321,6 +506,8 @@ if (typeof module !== "undefined" && module.exports) {
     candidateModules,
     applyThemeCss,
     themeEngineModule,
+    makePluginApi,
+    runPlugins,
   };
 }
 
