@@ -17,7 +17,9 @@ def test_install_uses_backup_and_patches(fake_apps):
     entries = spa.read_spa(fake_apps / "xpui.spa")
     assert patch.has_loader(entries["index.html"].decode())
     assert "reverse-loader.js" in entries
-    assert json.loads(entries["reverse/config.json"]) == {"theme": None, "plugins": []}
+    cfg = json.loads(entries["reverse/config.json"])
+    assert cfg["theme"] is None and cfg["plugins"] == []
+    assert cfg["themes"] == ["amoled", "clean-dark"]  # panel tema listesi
     assert pristine.exists()
     assert spa.spa_hash(pristine) == before  # pristine orijinal baytlardır
 

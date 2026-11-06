@@ -10,12 +10,14 @@
 | GitHub | https://github.com/MrSpy00/ReverseSpotify |
 | Hedef | Spotify Desktop **1.3.8.620** (`%APPDATA%\Spotify`) — Windows x64 |
 | Stack | Python 3.14 (CLI/yama/izleyici) + saf JS loader (runtime) |
-| Test | `python -m pytest -q` (40) · `node --test "tests/js/*.test.mjs"` (21) |
+| Test | `python -m pytest -q` (56) · `node --test "tests/js/*.test.mjs"` (30) |
 
 ## Ne yapar
 
 Spotify'ı değiştirmeden (orijinal dosyalar korunarak) **kendi mod motorumuzla** tema,
-plugin, ad-block, UI temizliği ve kalite-reveal ekler. Spicetify bağımlılığı **yok**,
+plugin, ad-block, UI temizliği ve kalite-reveal ekler. **Uygulama içi kontrol paneli**
+(sağ alt dişli buton / `Ctrl+Shift+,`) — tema, plugin, reklam ve kalite ayarları
+terminal gerekmeden yönetilir. Spicetify bağımlılığı **yok**,
 sürüm-agnostik loader, güncelleme sonrası **otomatik onarım**. Premium bypass **yok**
 (ToS sınırı; kalite yalnızca reveal-only).
 
@@ -36,7 +38,8 @@ reversespotify/          CLI + repack motoru
 loader/
   reverse-loader.js      tek dosya IIFE runtime: boot izolasyonu, rspack/webpack
                          feature-detection, window.ReverseSpotify API, tema motoru,
-                         plugin runner (izinli facade), adblock/ui-overhaul/quality
+                         plugin runner (izinli facade), adblock/ui-overhaul/quality,
+                         kontrol paneli (in-app, SVG ikon, rs:theme override)
 themes/                  clean-dark, amoled (encore CSS variable override)
 plugins/                 key-highlight (örnek, perfClass light)
 registry.json            yerel plugin kayıt defteri
@@ -60,6 +63,10 @@ docs/                    specs/ plans/ xpui-findings.md usage.md
   entitlement/`maxSupportedQuality`/option üretimine dokunulmaz (test ile kilitli).
 - **Ad-block:** 39 gerçek `data-testid` CSS hide katmanı; ses-hook yok → dürüst
   `mode=ui-only` (docs/xpui-findings.md §2).
+- **Kontrol paneli:** `panel` modülü (6/6 boot) — gear butonu + `Ctrl+Shift+,`;
+  tema/plugin/adblock/UI grupları/kalite aç-kapa. Öncelik: `rs:theme` (localStorage)
+  > CLI config; UI grupları `rs:ui:*` anında etkili, plugin aç-kapa bir sonraki
+  açılışta geçerli. İkonlar SVG (emoji yasak).
 
 ## Derleme & Kurulum (tek komut)
 
@@ -82,8 +89,8 @@ python -m reversespotify watch --install-task  # ReverseSpotifyHeal (logon+günl
 ## Test & Doğrulama
 
 ```powershell
-python -m pytest -q                                        # 40 passed
-node --test "tests/js/*.test.mjs"                          # 21 passed
+python -m pytest -q                                        # 56 passed
+node --test "tests/js/*.test.mjs"                          # 30 passed
 python tools/cdp_smoke.py "(async()=>JSON.stringify(window.ReverseSpotify.modules))()"
 ```
 

@@ -86,11 +86,11 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET, cfg_update=_UNSET)
         cfg["plugins"] = set_plugins
     if cfg_update is not _UNSET:
         cfg.update(cfg_update)
-    entries["reverse/config.json"] = json.dumps(cfg).encode("utf-8")
 
     # tema CSS'lerini paketle; diskte olmayan eski reverse/themes/* girişlerini at
     wanted = set()
-    for th in themes_cmd.list_themes():
+    theme_list = themes_cmd.list_themes()
+    for th in theme_list:
         src = THEMES_ROOT / th["id"] / th["entryCss"]
         if not src.exists():
             raise ValueError(f"tema css eksik: {src}")
@@ -99,6 +99,10 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET, cfg_update=_UNSET)
         entries[entry] = src.read_bytes()
     for stale in [k for k in entries if k.startswith("reverse/themes/") and k not in wanted]:
         del entries[stale]
+
+    # panel tarayıcıdan tema listesini bu alandan okur (config paketlendikten sonra yazılır)
+    cfg["themes"] = sorted(t["id"] for t in theme_list)
+    entries["reverse/config.json"] = json.dumps(cfg).encode("utf-8")
 
     # plugin girişlerini paketle (config'teki id/entry üzerinden); bayatları at
     for p in cfg["plugins"]:
@@ -132,7 +136,16 @@ def _repack_cli(apps: Path, **kw) -> bool:
         return False
 
 
+def _restart_spotify(apps: Path, was_running: bool) -> None:
+    """Kullanıcı Spotify'ı kapalı bıraktıysa app'i zorla açma (gece sürprizi yok)."""
+    if was_running:
+        process.start_spotify(apps.parent / "Spotify.exe")
+    else:
+        print("not: Spotify kapalıydı, başlatılmadı")
+
+
 def cmd_install(args: argparse.Namespace) -> int:
+    was_running = process.spotify_running()
     _ensure_spotify_closed(args.yes)
 
     apps = config.spotify_apps_dir(args.spotify_dir)
@@ -142,7 +155,7 @@ def cmd_install(args: argparse.Namespace) -> int:
 
     if not _repack_cli(apps):
         return 1
-    process.start_spotify(apps.parent / "Spotify.exe")
+    _restart_spotify(apps, was_running)
     print("kurulum tamam")
     return cmd_status(args)
 
@@ -189,7 +202,11 @@ def cmd_status(args: argparse.Namespace) -> int:
     if not marker.exists():
         print("durum: bozuk (kurulum marker'ı eksik)")
         return 1
-    installed_hash = json.loads(marker.read_text(encoding="utf-8"))["hash"]
+    try:
+        installed_hash = json.loads(marker.read_text(encoding="utf-8"))["hash"]
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError):
+        print("durum: bozuk (kurulum marker'ı bozuk)")
+        return 1
     if installed_hash != spa.spa_hash(spa_path):
         print("durum: bozuk (hash uyuşmazlığı — spa değişmiş)")
         return 1
@@ -201,15 +218,21 @@ def cmd_status(args: argparse.Namespace) -> int:
         if isinstance(p, dict) and "id" in p:
             state = "aktif" if p.get("enabled", True) else "pasif"
             print(f"plugin: {p['id']} ({state})")
-    mode, count = _adblock_info()
+    mode, count = _adblock_info(entries)
     print(f"adblock: {mode} ({count} seçik)")
     return 0
 
 
-def _adblock_info() -> tuple[str, int]:
-    """loader kaynağından adblock modu ve seçik sayısını oku (dürüst statik rapor)."""
-    loader = Path(__file__).resolve().parent.parent / "loader" / "reverse-loader.js"
-    src = loader.read_text(encoding="utf-8")
+def _adblock_info(entries: dict[str, bytes] | None = None) -> tuple[str, int]:
+    """spa içindeki loader'dan (yoksa repo loader'ından) adblock modu/sezik sayisi.
+
+    Repo loader'ı git pull ile değişmiş olsa bile durum, çalışan spa'yı raporlamalı.
+    """
+    if entries and "reverse-loader.js" in entries:
+        src = entries["reverse-loader.js"].decode("utf-8", errors="replace")
+    else:
+        loader = Path(__file__).resolve().parent.parent / "loader" / "reverse-loader.js"
+        src = loader.read_text(encoding="utf-8")
     mode_m = re.search(r'ADBLOCK_MODE = "([^"]+)"', src)
     block_m = re.search(r"ADBLOCK_SELECTORS = \[(.*?)\]", src, re.S)
     count = len(re.findall(r'"[^"]+"', block_m.group(1))) if block_m else 0
@@ -233,6 +256,7 @@ def cmd_themes_set(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"hata: {exc}")
         return 1
+    was_running = process.spotify_running()
     _ensure_spotify_closed(args.yes)
 
     apps = config.spotify_apps_dir(args.spotify_dir)
@@ -241,7 +265,7 @@ def cmd_themes_set(args: argparse.Namespace) -> int:
         return 1
     if not _repack_cli(apps, set_theme=args.theme_id):
         return 1
-    process.start_spotify(apps.parent / "Spotify.exe")
+    _restart_spotify(apps, was_running)
     print(f"tema: {args.theme_id}")
     return 0
 
@@ -321,10 +345,11 @@ def cmd_plugins_add(args: argparse.Namespace) -> int:
     old_reset = cfg.get("resetDisabled")
     old_reset = [n for n in old_reset if isinstance(n, str)] if isinstance(old_reset, list) else []
     cfg_update = {"resetDisabled": [n for n in old_reset if n != entry_name] + [entry_name]}
+    was_running = process.spotify_running()
     _ensure_spotify_closed(args.yes)
     if not _repack_cli(apps, set_plugins=new_list, cfg_update=cfg_update):
         return 1
-    process.start_spotify(apps.parent / "Spotify.exe")
+    _restart_spotify(apps, was_running)
     print(f"plugin eklendi: {pid}")
     return 0
 
@@ -341,10 +366,11 @@ def _plugins_mutate(args: argparse.Namespace, mutate) -> int:
     except ValueError as exc:
         print(f"hata: {exc}")
         return 1
+    was_running = process.spotify_running()
     _ensure_spotify_closed(args.yes)
     if not _repack_cli(apps, set_plugins=new_list, cfg_update=cfg_update or {}):
         return 1
-    process.start_spotify(apps.parent / "Spotify.exe")
+    _restart_spotify(apps, was_running)
     return 0
 
 
@@ -453,15 +479,14 @@ def main(argv: list[str] | None = None) -> int:
 def cmd_watch(args: argparse.Namespace) -> int:
     if getattr(args, "install_task", False):
         return cmd_watch_install_task()
+    _write_watch_bat()  # repo/python taşındıysa elle çalışan her watch bat'ı onarır
     result = watch.check_and_heal(args.spotify_dir)
     print(f"watch: {result}")
     return {"ok": 0, "healed": 0, "vanilla": 2, "broken": 1}[result]
 
 
-def cmd_watch_install_task() -> int:
-    """Yol bağımsız planlayıcı: runtime'da çözülmüş yollarla wrapper bat üretir."""
-    import subprocess
-
+def _write_watch_bat() -> Path:
+    """Yol bağımsız planlayıcı wrapper'ı: yollar runtime'da çözülür, her çağrıda tazelenir."""
     root = Path(__file__).resolve().parent.parent
     py = sys.executable
     bat = config.data_root() / "watch-once.bat"
@@ -470,6 +495,14 @@ def cmd_watch_install_task() -> int:
         f'@echo off\r\ncd /d "{root}"\r\n"{py}" -m reversespotify watch --once\r\n',
         encoding="utf-8",
     )
+    return bat
+
+
+def cmd_watch_install_task() -> int:
+    """Planlayıcı görevlerini kur/ yenile (schtasks tek görevde çift trigger desteklemez)."""
+    import subprocess
+
+    bat = _write_watch_bat()
     ok = True
     for name, *sched in (
         ("ReverseSpotifyHeal", "/SC", "ONLOGON"),

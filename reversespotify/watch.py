@@ -57,7 +57,12 @@ def check_and_heal(spotify_dir: str | None = None) -> str:
     if not marked:
         return "broken"  # loader var ama marker yok — tutarsız kurulum
 
-    installed = json.loads(marker.read_text(encoding="utf-8"))
+    try:
+        installed = json.loads(marker.read_text(encoding="utf-8"))
+        if not isinstance(installed, dict):
+            installed = {}
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        installed = {}  # bozuk marker → hash uyuşmazlığı gibi heal (asla traceback)
     if installed.get("hash") != spa.spa_hash(spa_path):
         return _heal(spotify_dir, versioned=False)
 

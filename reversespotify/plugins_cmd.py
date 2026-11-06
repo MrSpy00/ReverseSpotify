@@ -69,7 +69,10 @@ def list_repo_plugins() -> list[dict]:
         return out
     for d in sorted(root.iterdir()):
         if (d / "manifest.json").exists():
-            out.append(load_plugin_dir(d))
+            try:
+                out.append(load_plugin_dir(d))
+            except ValueError as exc:
+                print(f"uyari: atlandi bozuk manifest ({d.name}): {exc}")
     return out
 
 

@@ -16,6 +16,23 @@ Hedef: Spotify Desktop 1.3.8.620 (Windows). Komutlar repo kökünden:
 | `watch --once` | Tek tespit+onarım: `ok`→0 · `healed`→0 · `vanilla`→2 · `broken`→1 |
 | `watch --install-task` | `ReverseSpotifyHeal` (logon) + `ReverseSpotifyHealDaily` (13:00) görevlerini kurar |
 
+## Uygulama içi kontrol paneli (terminal gerekmez)
+
+Spotify açıkken **sağ alttaki dişli butona** veya **Ctrl+Shift+,** tuşlarına bas:
+
+- **Tema** — kurulu temalar arasında anında geçiş (`Seç`), "Kapalı (vanilla görünüm)" ile
+  temayı kapatma. Panel seçimi `rs:theme` localStorage anahtarında tutulur; "Varsayılan (config)"
+  ile CLI `themes set` kararına dönülür.
+- **Pluginler** — aktif plugin'i aç/kapat (`rs:disabled`, bir sonraki açılışta geçerli;
+  CLI-pasif olanlar panel'den açılmaz).
+- **Reklam ve UI temizliği** — adblock ve upsell/dsa gruplarını anında aç/kapat
+  (`rs:ui:*` anahtarları, sayfa yenilenmeden etkili).
+- **Kalite** — reveal-only seçik sayısını gösterir (`Göster` ile yeniden dener).
+- **Bilgi** — mod, fallback, konsol adresi ve genel sıfırlama talimatı.
+
+Öncelik: panel (`rs:theme`) > CLI config. Panel'de "Varsayılan (config)" seçeneği yoksa
+(ilk kez tema seçilmediyse) CLI config uygulanır.
+
 ## Tam akış kontrol listesi (doğrulanmış — 2026-11-06)
 
 | Adım | Beklenen |
@@ -24,7 +41,7 @@ Hedef: Spotify Desktop 1.3.8.620 (Windows). Komutlar repo kökünden:
 | `install --yes` → `status` | install=0, status=**0** |
 | `themes set amoled --yes` → `status` | 0, status=**0**, `tema: amoled` |
 | `plugins add key-highlight --yes` → `status` | 0, status=**0**, `plugin: ... (aktif)` |
-| CDP gözlem | modules 5/5 failed[], `adblock ui-only (39 seçik)`, badge `.rs-keyhl` |
+| CDP gözlem | modules 6/6 failed[], `adblock ui-only (39 seçik)`, badge `.rs-keyhl`, panel `#rs-panel-btn` → `#rs-panel` |
 | `themes set clean-dark --yes` | 0 |
 | `watch --once` (sağlıklı kurulum) | **`watch: ok`** (0) |
 | spa hash bilinçli değişimi → `watch --once` | **`watch: healed`** → status=0 |
@@ -37,6 +54,7 @@ Hedef: Spotify Desktop 1.3.8.620 (Windows). Komutlar repo kökünden:
 
 | Anahtar | Etki |
 | --- | --- |
+| `rs:theme` | Panel tema override'ı: `""` = kapat, yok = CLI config (`rs:theme` > config) |
 | `rs:ui:upsell` = `0` | Upsell/indir banner gizlemesini kapatır |
 | `rs:ui:dsa` = `0` | `home-dsa-message-banner` gizlemesini kapatır |
 | `rs:disabled` | JSON array — çöken plugin/çekirdek modüller otomatik buraya düşer (`plugin:<id>`). Çöken plugin: `plugins enable <id>` (config'e `resetDisabled` yazar, boot'ta rs:disabled'tan temizlenir). Çekirdek modül veya genel temizlik: konsoldan `localStorage.removeItem('rs:disabled')` |
