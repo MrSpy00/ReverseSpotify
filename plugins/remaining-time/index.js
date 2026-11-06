@@ -29,8 +29,27 @@
     return m + ":" + (s < 10 ? "0" : "") + s;
   }
 
+  var POS = {
+    "alt-orta": { bottom: "98px", top: "auto", left: "50%", right: "auto", transform: "translateX(-50%)" },
+    "sag-alt": { bottom: "150px", top: "auto", left: "auto", right: "16px", transform: "none" },
+    "sol-alt": { bottom: "150px", top: "auto", left: "16px", right: "auto", transform: "none" },
+    "ust-orta": { top: "12px", bottom: "auto", left: "50%", right: "auto", transform: "translateX(-50%)" },
+  };
+
+  function applyPos() {
+    var key = "alt-orta";
+    try {
+      if (ReverseSpotify.getSetting) key = ReverseSpotify.getSetting("position", "alt-orta");
+    } catch (e) {}
+    var p = POS[key] || POS["alt-orta"];
+    for (var k in p) {
+      if (Object.prototype.hasOwnProperty.call(p, k)) chip.style[k] = p[k];
+    }
+  }
+
   function tick() {
     if (!chip || !chip.isConnected) return;
+    applyPos();
     var posEl = document.querySelector('[data-testid="playback-position"]');
     var durEl = document.querySelector('[data-testid="playback-duration"]');
     var pos = posEl ? parseClock(posEl.textContent) : null;

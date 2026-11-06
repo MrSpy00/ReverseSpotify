@@ -30,6 +30,43 @@ def plugins_root() -> Path:
     return Path(env) if env else PLUGINS_ROOT
 
 
+def _validate_settings(settings: object, ctx: str) -> None:
+    if not isinstance(settings, list):
+        raise ValueError(f"geçersiz manifest {ctx}: settings liste olmalı")
+    for s in settings:
+        if not isinstance(s, dict):
+            raise ValueError(f"geçersiz manifest {ctx}: settings öğesi sözlük olmalı")
+        key = s.get("key")
+        if not isinstance(key, str) or not _ID_RE.match(key):
+            raise ValueError(f"geçersiz manifest {ctx}: settings key '{key}' güvenli değil")
+        label = s.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(f"geçersiz manifest {ctx}: settings '{key}' label metni zorunlu")
+        help_ = s.get("help")
+        if help_ is not None and (not isinstance(help_, str) or len(help_) > 300):
+            raise ValueError(f"geçersiz manifest {ctx}: settings '{key}' help metni olmalı")
+        typ = s.get("type")
+        if typ == "toggle":
+            if not isinstance(s.get("default"), bool):
+                raise ValueError(f"geçersiz manifest {ctx}: settings '{key}' toggle default bool olmalı")
+        elif typ == "select":
+            opts = s.get("options")
+            if not isinstance(opts, list) or not opts or not all(
+                isinstance(o, str) and o for o in opts
+            ):
+                raise ValueError(
+                    f"geçersiz manifest {ctx}: settings '{key}' select options boş metin listesi olmalı"
+                )
+            if s.get("default") not in opts:
+                raise ValueError(
+                    f"geçersiz manifest {ctx}: settings '{key}' default options içinde olmalı"
+                )
+        else:
+            raise ValueError(
+                f"geçersiz manifest {ctx}: settings '{key}' type select|toggle olmalı"
+            )
+
+
 def validate_manifest(data: object, ctx: str) -> dict:
     if not isinstance(data, dict):
         raise ValueError(f"geçersiz manifest {ctx}: sözlük bekleniyordu")
@@ -44,6 +81,12 @@ def validate_manifest(data: object, ctx: str) -> dict:
         raise ValueError(f"geçersiz manifest {ctx}: permissions yalnız settings|ui olabilir")
     if data["perfClass"] not in ("light", "medium"):
         raise ValueError(f"geçersiz manifest {ctx}: perfClass light|medium olmalı (heavy yasak)")
+    if "description" in data:
+        d = data["description"]
+        if not isinstance(d, str) or len(d) > 300:
+            raise ValueError(f"geçersiz manifest {ctx}: description en fazla 300 karakter metin olmalı")
+    if "settings" in data:
+        _validate_settings(data["settings"], ctx)
     return data
 
 

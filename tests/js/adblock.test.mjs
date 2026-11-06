@@ -134,9 +134,17 @@ test("quality reveal only widens visible options, no entitlement rewrite", () =>
     /maxSupportedQuality/,
     /streamingQuality\s*[:=]/,
     /subscription/i,
-    /createElement\(\s*["']option["']\s*\)/,
   ];
   for (const re of forbidden) {
     assert.ok(!re.test(LOADER_SRC), `quality kısıtı ihlali: ${re}`);
   }
+  // option üretimi quality modülünde yasak (panel kendi form select'i hariç)
+  const qStart = LOADER_SRC.indexOf("function makeQualityModule");
+  assert.ok(qStart >= 0, "makeQualityModule bulunamadı");
+  const qEnd = LOADER_SRC.indexOf("\nfunction ", qStart + 10);
+  const qSrc = LOADER_SRC.slice(qStart, qEnd > 0 ? qEnd : undefined);
+  assert.ok(
+    !/createElement\(\s*["']option["']\s*\)/.test(qSrc),
+    "quality kısıtı ihlali: quality modülü option üretmemeli"
+  );
 });

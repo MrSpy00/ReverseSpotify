@@ -25,10 +25,20 @@ kendi buton stiliyle) veya **Ctrl+Shift+,** tuşlarına bas; **ESC** ile kapat. 
   önizlemeli, seçili kart yeşil çerçeve + check), "Kapalı (vanilla görünüm)" ile temayı
   kapatma. Panel seçimi `rs:theme` localStorage anahtarında tutulur; "Varsayılan (config)"
   ile CLI `themes set` kararına dönülür. Crimson teması seçiliyken arkaplan duvar kağıdı
-  (`#rs-bg` katmanı) otomatik yüklenir.
-- **Eklentiler** — aktif plugin'i aç/kapat (`rs:disabled`, bir sonraki açılışta geçerli;
-  CLI-pasif olanlar panel'den açılmaz). Satırdaki chevron alt menüyü açar: performans
-  sınıfı, izinler, giriş dosyası ve varsa depo bağlantısı.
+  (`#rs-bg` katmanı) otomatik yüklenir. Ek olarak:
+  - **Tema arkaplanı** — "Görsel/Video seç" ile seçili temaya kendi dosyanız (image/*,
+    video/*, ≤4 MB) atanır (`rs:bg:<tema>`); manifest arkaplanından ÖNCE gelir, "Özeli
+    kaldır" ile silinir. Video dosyaları otomatik döngülü/sessiz oynatılır.
+  - **Tema oluştur** — kimlik + ad + 2 renk + CSS ile kendi temanızı oluşturup anında
+    uygular (`rs:customThemes`); "Özel temalar" bölümünden yönetim/silme yapılır.
+- **Eklentiler** — her satırda eklentinin **açıklaması her zaman görünür** (manifest
+  `description`), ardından durum. Aktif plugin'i aç/kapat (`rs:disabled`, bir sonraki
+  açılışta geçerli; CLI-pasif olanlar panel'den açılmaz). Chevron alt menüsü: performans
+  sınıfı, izinler, giriş dosyası, depo bağlantısı ve **ayarlar** — manifest `settings`
+  şemasındaki kontroller (ör. remaining-time "Konum": alt-orta/sag-alt/sol-alt/ust-orta)
+  anında `rs:set:<id>` anahtarına kaydedilir. "Plugin ekle" ile kendi eklentinizi
+  (kimlik/ad/açıklama/izinler/JS kod) yazıp çalıştırabilirsiniz (`rs:customPlugins`,
+  kayıtta sözdizimi + hız kontrolü yapılır).
 - **Temizlik** — adblock ve upsell/dsa gruplarını anında aç/kapat (`rs:ui:*` anahtarları,
   sayfa yenilenmeden etkili).
 - **Araçlar** — kalite reveal-only seçik sayısı (`Göster` ile yeniden dener), kısayollar,
@@ -61,6 +71,10 @@ kendi buton stiliyle) veya **Ctrl+Shift+,** tuşlarına bas; **ESC** ile kapat. 
 | Anahtar | Etki |
 | --- | --- |
 | `rs:theme` | Panel tema override'ı: `""` = kapat, yok = CLI config (`rs:theme` > config) |
+| `rs:bg:<temaId>` | Kullanıcı arkaplanı (dataURL image/video) — manifest `background`'ından önce gelir |
+| `rs:customThemes` | JSON array — panel "Tema oluştur" ile oluşturulan özel temalar `{id,name,swatch,css}` |
+| `rs:customPlugins` | JSON array — panel "Plugin ekle" ile oluşturulan özel eklentiler `{id,...,code}` |
+| `rs:set:<pluginId>` | JSON object — eklenti ayarları (manifest `settings` şeması); facade `getSetting/setSetting` |
 | `rs:ui:upsell` = `0` | Upsell/indir banner gizlemesini kapatır |
 | `rs:ui:dsa` = `0` | `home-dsa-message-banner` gizlemesini kapatır |
 | `rs:disabled` | JSON array — çöken plugin/çekirdek modüller otomatik buraya düşer (`plugin:<id>`). Çöken plugin: `plugins enable <id>` (config'e `resetDisabled` yazar, boot'ta rs:disabled'tan temizlenir). Çekirdek modül veya genel temizlik: konsoldan `localStorage.removeItem('rs:disabled')` |

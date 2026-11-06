@@ -78,6 +78,15 @@ docs/                    specs/ plans/ xpui-findings.md usage.md
   > CLI config; UI grupları `rs:ui:*` anında etkili, plugin aç-kapa bir sonraki
   açılışta geçerli. Tema değişince `loadThemeBackground` manifest fetch + `#rs-bg`
   katmanı (görsel cover / video autoplay, opaklık 0.22).
+- **v4 özelleştirme:** manifest şeması `description` (≤300) + `settings` (select/toggle,
+  `label/help/default`) — `_repack` config entry'lerine backfill eder (manifest tek kaynak).
+  Panel: her eklenti satırında açıklama + detail'de ayar kontrolleri (`rs:set:<id>` anında
+  kaydeder, facade `getSetting/setSetting`), tema pane'ında "Görsel/Video seç" (≤4MB
+  dataURL → `rs:bg:<id>`, manifestten önce), "Tema oluştur" (`rs:customThemes`) ve
+  "Plugin ekle" (`rs:customPlugins`, `new Function` sözdizimi + setInterval <100ms
+  kontrolü) formları. `themeEngineModule`/`setTheme` custom temayı fetch'siz uygular;
+  `runPlugins` `p.code` ile custom eklentiyi sunucusuz çalıştırır; boot'ta custom
+  listeler config listesine merge edilir.
 
 ## Derleme & Kurulum (tek komut)
 
@@ -100,8 +109,8 @@ python -m reversespotify watch --install-task  # ReverseSpotifyHeal (logon+günl
 ## Test & Doğrulama
 
 ```powershell
-python -m pytest -q                                        # 74 passed
-node --test "tests/js/*.test.mjs"                          # 49 passed
+python -m pytest -q                                        # 80 passed
+node --test "tests/js/*.test.mjs"                          # 56 passed
 python tools/cdp_smoke.py "(async()=>JSON.stringify(window.ReverseSpotify.modules))()"
 ```
 

@@ -4,5 +4,6 @@
   "version": "1.0.0",
   "entry": "index.js",
   "permissions": ["ui"],
-  "perfClass": "light"
+  "perfClass": "light",
+  "description": "\"?\" tuşuna basınca ReverseSpotify ve yerleşik Spotify kısayollarının listesini modal olarak açar."
 }

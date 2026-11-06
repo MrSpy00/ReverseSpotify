@@ -4,5 +4,6 @@
   "version": "1.0.0",
   "entry": "index.js",
   "permissions": ["settings", "ui"],
-  "perfClass": "medium"
+  "perfClass": "medium",
+  "description": "Ctrl+Alt+I ile ReverseSpotify çalışma zamanı durumunu (tema, eklentiler, modüller, hata kaydı) modalda gösterir — destek ve arıza ayıklama aracı."
 }

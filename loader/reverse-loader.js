@@ -177,13 +177,22 @@ function applyBackground(win, id, spec) {
   const doc = win && win.document;
   if (!doc || !doc.getElementById) return false;
   const old = doc.getElementById("rs-bg");
-  const file = spec && (spec.backgroundVideo || spec.background);
-  if (!id || !file) {
+  // Kullanıcı arkaplanı (panel dosya seçimi → rs:bg:<id>) manifestten önce gelir
+  let userBg = null;
+  if (id) {
+    try {
+      userBg = win.localStorage && win.localStorage.getItem("rs:bg:" + id);
+    } catch (_) {}
+  }
+  const hasUser = typeof userBg === "string" && userBg.length > 0;
+  const useVideo = hasUser ? /^data:video\//i.test(userBg) : !!(spec && spec.backgroundVideo);
+  const file = hasUser ? null : spec && (spec.backgroundVideo || spec.background);
+  if (!id || (!hasUser && !file)) {
     if (old) old.remove();
     return false;
   }
   let op = 0.22;
-  const raw = spec.backgroundOpacity;
+  const raw = spec && spec.backgroundOpacity;
   if (typeof raw === "number" && raw >= 0 && raw <= 1) op = raw;
   let layer = old;
   if (!layer) {
@@ -193,13 +202,15 @@ function applyBackground(win, id, spec) {
     doc.body.insertBefore(layer, doc.body.firstChild);
   }
   layer.textContent = "";
-  const url = "/reverse/themes/" + encodeURIComponent(id) + "/" + encodeURIComponent(file);
+  const url = hasUser
+    ? userBg
+    : "/reverse/themes/" + encodeURIComponent(id) + "/" + encodeURIComponent(file);
   layer.style.position = "fixed";
   layer.style.inset = "0";
   layer.style.zIndex = "6";
   layer.style.pointerEvents = "none";
   layer.style.opacity = String(op);
-  if (spec.backgroundVideo) {
+  if (useVideo) {
     const v = doc.createElement("video");
     v.autoplay = true;
     v.loop = true;
@@ -231,6 +242,34 @@ function loadThemeBackground(win, id, f) {
     .then((mf) => applyBackground(win, id, mf && typeof mf === "object" ? mf : null));
 }
 
+// Kullanıcı temaları (panel "Tema oluştur" → rs:customThemes, localStorage)
+function readCustomThemes(win) {
+  try {
+    const raw = win.localStorage && win.localStorage.getItem("rs:customThemes");
+    const arr = raw ? JSON.parse(raw) : null;
+    return Array.isArray(arr) ? arr : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function customThemeFor(win, id) {
+  if (!id) return null;
+  const t = readCustomThemes(win).find((x) => x && x.id === id);
+  return t && typeof t.css === "string" && t.css ? t : null;
+}
+
+// Panel "Plugin ekle" ile oluşturulan özel eklentiler (localStorage rs:customPlugins)
+function readCustomPlugins(win) {
+  try {
+    const raw = win.localStorage && win.localStorage.getItem("rs:customPlugins");
+    const arr = raw ? JSON.parse(raw) : null;
+    return Array.isArray(arr) ? arr : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 function themeEngineModule(win, fetchFn) {
   const f = fetchFn || ((...a) => (win.fetch || fetch)(...a));
   return {
@@ -240,6 +279,13 @@ function themeEngineModule(win, fetchFn) {
       const theme = resolveTheme(win, api && api.settings);
       if (!theme) {
         applyBackground(win, null, null);
+        return;
+      }
+      // custom tema sunucuda yok: fetch'siz uygula (sadece manifest denemesi kalır)
+      const custom = customThemeFor(win, theme);
+      if (custom) {
+        api.applyTheme(custom.css);
+        await loadThemeBackground(win, theme, f);
         return;
       }
       // 404/ager reddetme: kaçak hata kalıcı disable'a yol açmasın (rs:disabled kalıcıdır)
@@ -318,6 +364,28 @@ function makePluginApi(api, registry, id, perms, storage) {
       set: (k, v) => {
         api.settings[k] = v;
       },
+    };
+    // Kalıcı plugin ayarları: rs:set:<id> (JSON) — panel de aynı anahtarı yazar/okuur
+    const SET_KEY = "rs:set:" + id;
+    const readSet = () => {
+      try {
+        const raw = storage && storage.getItem(SET_KEY);
+        const o = raw ? JSON.parse(raw) : null;
+        return o && typeof o === "object" ? o : {};
+      } catch (_) {
+        return {};
+      }
+    };
+    facade.getSetting = (key, def) => {
+      const o = readSet();
+      return Object.prototype.hasOwnProperty.call(o, key) ? o[key] : def;
+    };
+    facade.setSetting = (key, val) => {
+      const o = readSet();
+      o[key] = val;
+      try {
+        storage && storage.setItem(SET_KEY, JSON.stringify(o));
+      } catch (_) {}
     };
   }
   if (has("ui")) {
@@ -416,15 +484,20 @@ async function runPlugins(api, registry, list, fetchFn, storage) {
       continue;
     }
     let src;
-    try {
-      const res = await f(
-        "/reverse/plugins/" + encodeURIComponent(p.id) + "/" + encodeURIComponent(p.entry || "index.js")
-      );
-      if (!res || !res.ok) throw new Error("http " + (res ? res.status : "yok"));
-      src = await res.text();
-    } catch (e) {
-      fail(name, e, p.id);
-      continue;
+    if (typeof p.code === "string" && p.code) {
+      // panel "Plugin ekle" ile oluşturulan özel plugin: kod localStorage'da, sunucu yok
+      src = p.code;
+    } else {
+      try {
+        const res = await f(
+          "/reverse/plugins/" + encodeURIComponent(p.id) + "/" + encodeURIComponent(p.entry || "index.js")
+        );
+        if (!res || !res.ok) throw new Error("http " + (res ? res.status : "yok"));
+        src = await res.text();
+      } catch (e) {
+        fail(name, e, p.id);
+        continue;
+      }
     }
     try {
       const fn = new Function(
@@ -535,6 +608,12 @@ function browserBoot() {
         applyBackground(win, null, null);
         return;
       }
+      const custom = customThemeFor(win, eff);
+      if (custom) {
+        applyThemeCss(document, custom.css);
+        await loadThemeBackground(win, eff, (u) => fetch(u));
+        return;
+      }
       try {
         const res = await fetch("/reverse/themes/" + encodeURIComponent(eff) + "/theme.css");
         if (res && res.ok) {
@@ -618,7 +697,14 @@ function browserBoot() {
         { name: "theme-engine", ...themeEngineModule(win) },
         {
           name: "plugins",
-          run: () => runPlugins(api, registry, api.settings.plugins || [], null, win.localStorage),
+          run: () =>
+            runPlugins(
+              api,
+              registry,
+              (api.settings.plugins || []).concat(readCustomPlugins(win)),
+              null,
+              win.localStorage
+            ),
         },
         makeAdblockModule(win, api),
         makeUiOverhaulModule(win, api),
@@ -873,6 +959,33 @@ const PANEL_CSS = [
   "#rs-panel-card .rs-tails{display:flex;align-items:center;gap:6px;flex:none}",
   "#rs-panel-card .rs-wrap{margin-bottom:6px}",
   "#rs-panel-card .rs-wrap>.rs-row{margin-bottom:0}",
+  // -- form (tema / eklenti oluştur) --
+  "#rs-panel-card .rs-form{display:grid;gap:8px;padding:12px;margin-top:8px;background:#141414;",
+  "border:1px solid rgba(255,255,255,.08);border-radius:10px}",
+  "#rs-panel-card .rs-flbl{display:grid;gap:4px;font:600 11px/1.3 system-ui,-apple-system,'Segoe UI',sans-serif;",
+  "color:#a7a7a7}",
+  "#rs-panel-card .rs-flbl .rs-fhelp{font-weight:400;color:#6a6a6a;font-size:10.5px;line-height:1.45}",
+  "#rs-panel-card .rs-fhelp.full{flex-basis:100%;display:block}",
+  "#rs-panel-card .rs-inp,#rs-panel-card .rs-ta{background:#0f0f0f;border:1px solid rgba(255,255,255,.12);",
+  "border-radius:6px;color:#eaeaea;font:400 12.5px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;",
+  "padding:7px 9px;resize:vertical;width:100%;box-sizing:border-box}",
+  "#rs-panel-card .rs-inp:focus,#rs-panel-card .rs-ta:focus{outline:none;border-color:#1ed760}",
+  "#rs-panel-card .rs-color{width:100%;height:34px;padding:2px;background:#0f0f0f;",
+  "border:1px solid rgba(255,255,255,.12);border-radius:6px;cursor:pointer}",
+  "#rs-panel-card .rs-err{margin:0;font-size:11.5px;color:#ff7b7b}",
+  "#rs-panel-card .rs-err:empty{display:none}",
+  // -- eklenti ayarları --
+  "#rs-panel-card .rs-setbox{display:grid;gap:6px;margin-top:8px;padding:9px 10px;background:#141414;",
+  "border:1px solid rgba(255,255,255,.07);border-radius:8px}",
+  "#rs-panel-card .rs-sethdr{font:700 10.5px/1 system-ui,-apple-system,'Segoe UI',sans-serif;",
+  "letter-spacing:.08em;text-transform:uppercase;color:#8f8f8f}",
+  "#rs-panel-card .rs-setrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+  "#rs-panel-card .rs-setlbl{font:600 12px/1.3 system-ui,-apple-system,'Segoe UI',sans-serif;color:#d7d7d7}",
+  "#rs-panel-card .rs-sel{background:#0f0f0f;border:1px solid rgba(255,255,255,.12);border-radius:6px;",
+  "color:#eaeaea;font:400 12px system-ui,-apple-system,'Segoe UI',sans-serif;padding:4px 6px;margin-left:auto}",
+  "#rs-panel-card .rs-perm{display:flex;gap:12px;flex-wrap:wrap}",
+  "#rs-panel-card .rs-permlbl{display:inline-flex;align-items:center;gap:6px;",
+  "font:400 12px system-ui,-apple-system,'Segoe UI',sans-serif;color:#d7d7d7;cursor:pointer}",
   "#rs-panel-card .rs-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows .2s ease}",
   "#rs-panel-card .rs-detail.open{grid-template-rows:1fr}",
   "#rs-panel-card .rs-detail>div{overflow:hidden;min-height:0}",
@@ -1109,6 +1222,85 @@ function makePanelModule(win, api, registry) {
     return c;
   }
 
+  // ---- localStorage yardımcıları (panel kalıcı verisi) ----
+  function lsGet(key) {
+    try {
+      return win.localStorage.getItem(key);
+    } catch (_) {
+      return null;
+    }
+  }
+  function lsSet(key, val) {
+    try {
+      win.localStorage.setItem(key, val);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  function lsDel(key) {
+    try {
+      win.localStorage.removeItem(key);
+    } catch (_) {}
+  }
+  function readJsonList(key) {
+    try {
+      const raw = lsGet(key);
+      const arr = raw ? JSON.parse(raw) : null;
+      return Array.isArray(arr) ? arr : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  function readJsonObject(key) {
+    try {
+      const raw = lsGet(key);
+      const o = raw ? JSON.parse(raw) : null;
+      return o && typeof o === "object" && !Array.isArray(o) ? o : {};
+    } catch (_) {
+      return {};
+    }
+  }
+  function writeJson(key, val) {
+    return lsSet(key, JSON.stringify(val));
+  }
+
+  // ---- form alanları ----
+  function textInput(placeholder, value) {
+    const i = doc.createElement("input");
+    i.type = "text";
+    i.className = "rs-inp";
+    i.placeholder = placeholder || "";
+    i.value = value || "";
+    return i;
+  }
+  function textArea(placeholder, rows) {
+    const t = doc.createElement("textarea");
+    t.className = "rs-ta";
+    t.placeholder = placeholder || "";
+    t.rows = rows || 6;
+    return t;
+  }
+  function field(label, input, help) {
+    const l = doc.createElement("label");
+    l.className = "rs-flbl";
+    const sp = doc.createElement("span");
+    sp.textContent = label;
+    l.append(sp, input);
+    if (help) {
+      const h = doc.createElement("small");
+      h.className = "rs-fhelp";
+      h.textContent = help;
+      l.appendChild(h);
+    }
+    return l;
+  }
+  function errLine() {
+    const e = doc.createElement("p");
+    e.className = "rs-err";
+    return e;
+  }
+
   let activeTab = "tema"; // sekme seçimi fill yeniden çizimlerinde korunur
 
   function fill(card) {
@@ -1142,7 +1334,7 @@ function makePanelModule(win, api, registry) {
     head.append(mark, hgrp, x);
 
     // ---- Sekmeler (menü) ----
-    const meta = (api.settings && api.settings.themeMeta) || {};
+    const meta = Object.assign({}, (api.settings && api.settings.themeMeta) || {});
     const TABS = [
       ["tema", "Tema"],
       ["eklenti", "Eklentiler"],
@@ -1197,12 +1389,20 @@ function makePanelModule(win, api, registry) {
         )
       );
     }
+    const customs = readJsonList("rs:customThemes").filter((t) => t && typeof t.id === "string");
     const themes =
       api.settings && Array.isArray(api.settings.themes) && api.settings.themes.length
         ? api.settings.themes.slice()
         : cfgTheme
           ? [cfgTheme]
           : [];
+    for (const ct of customs) {
+      if (!themes.includes(ct.id)) themes.push(ct.id);
+      meta[ct.id] = {
+        name: ct.name || ct.id,
+        swatch: Array.isArray(ct.swatch) && ct.swatch.length === 2 ? ct.swatch : undefined,
+      };
+    }
     const grid = doc.createElement("div");
     grid.className = "rs-grid";
     grid.appendChild(
@@ -1220,12 +1420,191 @@ function makePanelModule(win, api, registry) {
       );
     }
     s1.appendChild(grid);
+
+    // -- Özel arkaplan: seçili temaya görsel/video (rs:bg:<id>, manifestten önce) --
+    if (cur) {
+      const bgKey = "rs:bg:" + cur;
+      const hasBg = !!lsGet(bgKey);
+      const file = doc.createElement("input");
+      file.type = "file";
+      file.accept = "image/*,video/*";
+      file.style.display = "none";
+      const bgErr = errLine();
+      file.addEventListener("change", async () => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        bgErr.textContent = "";
+        if (f.size > 4 * 1024 * 1024) {
+          bgErr.textContent = "Dosya 4 MB'tan küçük olmalı (tarayıcı depolama sınırı).";
+          file.value = "";
+          return;
+        }
+        const url = await new Promise((res, rej) => {
+          const fr = new FileReader();
+          fr.onload = () => res(String(fr.result));
+          fr.onerror = () => rej(new Error("okuma hatası"));
+          fr.readAsDataURL(f);
+        }).catch(() => null);
+        if (!url) {
+          bgErr.textContent = "Dosya okunamadı.";
+          return;
+        }
+        if (!lsSet(bgKey, url)) {
+          bgErr.textContent = "Depolama dolu — daha küçük bir dosya deneyin.";
+          return;
+        }
+        await api.setTheme(cur);
+        fill(card);
+      });
+      const bgTails = doc.createElement("div");
+      bgTails.className = "rs-tails";
+      bgTails.appendChild(pillBtn(hasBg ? "Dosyayı değiştir" : "Görsel/Video seç", () => file.click()));
+      if (hasBg) {
+        bgTails.appendChild(
+          pillBtn(
+            "Özeli kaldır",
+            async () => {
+              lsDel(bgKey);
+              await api.setTheme(cur);
+              fill(card);
+            },
+            true
+          )
+        );
+      }
+      s1.appendChild(
+        row(
+          "Tema arkaplanı",
+          hasBg
+            ? "özel dosya etkin · bu bilgisayarda saklanır"
+            : "manifest arkaplanı varsa o görünür; ayrıca kendi görsel/video dosyanızı seçebilirsiniz",
+          bgTails
+        )
+      );
+      s1.appendChild(bgErr);
+      s1.appendChild(file);
+    } else {
+      s1.appendChild(note("Özel arkaplan için önce bir tema seçin."));
+    }
+
+    // -- Özel temalar (yönetim: sil) --
+    if (customs.length) {
+      const cman = section("Özel temalar", ICO.palette);
+      for (const ct of customs) {
+        cman.appendChild(
+          row(
+            ct.name || ct.id,
+            "özel · tarayıcıda saklanır · gridde de görünür",
+            pillBtn(
+              "Sil",
+              async () => {
+                writeJson(
+                  "rs:customThemes",
+                  customs.filter((x) => x.id !== ct.id)
+                );
+                if (resolveTheme(win, api.settings) === ct.id) await api.setTheme("");
+                fill(card);
+              },
+              true
+            )
+          )
+        );
+      }
+      s1.appendChild(cman);
+    }
+
+    // -- Tema oluştur formu --
+    const tform = doc.createElement("div");
+    tform.className = "rs-form";
+    tform.hidden = true;
+    const tidIn = textInput("ornek-tema");
+    const tnameIn = textInput("Özel Tema");
+    const tc1 = doc.createElement("input");
+    tc1.type = "color";
+    tc1.className = "rs-color";
+    tc1.value = "#121212";
+    const tc2 = doc.createElement("input");
+    tc2.type = "color";
+    tc2.className = "rs-color";
+    tc2.value = "#1f1f1f";
+    const tcssTa = textArea("/* tema CSS */\nbody{background:#121212;color:#eaeaea}", 7);
+    const terr = errLine();
+    tform.append(
+      field("Kimlik", tidIn, "a-z, 0-9, tire — ör. neon-blue. Tema bu adla anılır."),
+      field("Görünür ad", tnameIn, "Panelde kartta görünecek isim."),
+      field("Ana renk", tc1, "Kart önizlemesinin koyu tonu."),
+      field("Vurgu rengi", tc2, "Kart önizlemesinin açık tonu."),
+      field("CSS", tcssTa, "Temanın tam CSS'i. Özel arkaplanı yukarıdaki bölümden ekleyin."),
+      terr
+    );
+    tform.appendChild(
+      pillBtn("Temayı oluştur ve uygula", async () => {
+        terr.textContent = "";
+        const id = tidIn.value.trim().toLowerCase();
+        const nm = tnameIn.value.trim();
+        const css = tcssTa.value.trim();
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+          terr.textContent = "Geçerli kimlik girin: a-z, 0-9, tire; ilk karakter harf veya rakam.";
+          return;
+        }
+        if (themes.includes(id)) {
+          terr.textContent = "Bu kimlik zaten kullanımda (özel veya hazır tema).";
+          return;
+        }
+        if (!nm) {
+          terr.textContent = "Görünür ad boş olamaz.";
+          return;
+        }
+        if (!css) {
+          terr.textContent = "CSS boş olamaz.";
+          return;
+        }
+        const next = customs.concat([
+          { id, name: nm, swatch: [tc1.value, tc2.value], css, createdAt: Date.now() },
+        ]);
+        if (!writeJson("rs:customThemes", next)) {
+          terr.textContent = "Kayıt başarısız — depolama dolu olabilir.";
+          return;
+        }
+        await api.setTheme(id);
+        fill(card);
+      })
+    );
+    s1.appendChild(
+      pillBtn("Tema oluştur", () => {
+        tform.hidden = !tform.hidden;
+      })
+    );
+    s1.appendChild(tform);
+    s1.appendChild(
+      note(
+        "Kartlara tıklayın — anında uygulanır. Özel tema ve arkaplanlar bu tarayıcıda " +
+          "(localStorage) saklanır; başka bilgisayara taşınmaz."
+      )
+    );
     panes.tema.appendChild(s1);
 
     // ---- Pluginler ----
     const s2 = section("Pluginler", ICO.apps);
-    const plugs = (api.settings && api.settings.plugins) || [];
-    if (!plugs.length) s2.appendChild(note("Kurulu plugin yok — CLI: plugins add <id>"));
+    const installedIds = new Set(
+      ((api.settings && api.settings.plugins) || []).map((p2) => (p2 && p2.id) || "")
+    );
+    const customPlugs = readJsonList("rs:customPlugins").filter(
+      (c) => c && typeof c.id === "string" && !installedIds.has(c.id)
+    );
+    const plugs = ((api.settings && api.settings.plugins) || []).concat(
+      customPlugs.map((c) => Object.assign({}, c, { custom: true }))
+    );
+    s2.appendChild(
+      note(
+        "Açıklama her satırda görünür; chevron alt menü: ayrıntı, izinler ve eklenti ayarları."
+      )
+    );
+    if (!plugs.length) {
+      s2.appendChild(
+        note('Kurulu eklenti yok — CLI: plugins add <id> veya aşağıdaki "Plugin ekle".')
+      );
+    }
     for (const p of plugs) {
       if (!p || typeof p.id !== "string") continue;
       const st = pluginRuntimeState(p, registry);
@@ -1235,25 +1614,28 @@ function makePanelModule(win, api, registry) {
       ]
         .filter(Boolean)
         .join(" · ");
+      // açıklama her zaman görünür (kullanıcı gereksinimi); yoksa metaLine düşer
+      const desc = typeof p.description === "string" && p.description ? p.description : null;
       let toggle = null;
       let state = "";
       if (st === "cli-pasif") {
         toggle = sw(false, null, true);
         toggle.title = "CLI ile pasif — plugins enable <id>";
-        state = (metaLine ? metaLine + " · " : "") + "CLI pasif";
+        state = "CLI pasif";
       } else if (st === "aktif") {
         toggle = sw(true, () => {
           registry.disable("plugin:" + p.id);
           fill(card);
         });
-        state = (metaLine ? metaLine + " · " : "") + "açık";
+        state = "açık";
       } else {
         toggle = sw(false, () => {
           registry.remove("plugin:" + p.id);
           fill(card);
         });
-        state = (metaLine ? metaLine + " · " : "") + "kapalı";
+        state = "kapalı";
       }
+      const sub = [p.custom ? "özel" : null, state, desc || metaLine].filter(Boolean).join(" · ");
       // Genişletilebilir alt menü: chevron → chips (izinler, sınıf, giriş, depo)
       const wrap = doc.createElement("div");
       wrap.className = "rs-wrap";
@@ -1280,6 +1662,66 @@ function makePanelModule(win, api, registry) {
       const repoLink = extLink("Depo", p.repo);
       if (repoLink) chips.appendChild(repoLink);
       dIn.appendChild(chips);
+      // -- eklenti ayarları (manifest settings şeması → rs:set:<id>) --
+      if (Array.isArray(p.settings) && p.settings.length) {
+        const setBox = doc.createElement("div");
+        setBox.className = "rs-setbox";
+        const setHdr = doc.createElement("div");
+        setHdr.className = "rs-sethdr";
+        setHdr.textContent = "Ayarlar";
+        setBox.appendChild(setHdr);
+        const setKey = "rs:set:" + p.id;
+        for (const s of p.settings) {
+          if (!s || typeof s.key !== "string" || !s.label) continue;
+          const line = doc.createElement("div");
+          line.className = "rs-setrow";
+          const lbl = doc.createElement("span");
+          lbl.className = "rs-setlbl";
+          lbl.textContent = s.label;
+          line.appendChild(lbl);
+          const curO = readJsonObject(setKey);
+          const curV = Object.prototype.hasOwnProperty.call(curO, s.key) ? curO[s.key] : s.default;
+          if (s.type === "toggle") {
+            const t = sw(curV === true, () => {
+              const nv = t.getAttribute("aria-checked") !== "true";
+              t.setAttribute("aria-checked", nv ? "true" : "false");
+              const o = readJsonObject(setKey);
+              o[s.key] = nv;
+              writeJson(setKey, o);
+            });
+            line.appendChild(t);
+          } else if (s.type === "select" && Array.isArray(s.options)) {
+            const sel = doc.createElement("select");
+            sel.className = "rs-sel";
+            for (const opt of s.options) {
+              const o = doc.createElement("option");
+              o.value = String(opt);
+              o.textContent = String(opt);
+              if (String(opt) === String(curV)) o.selected = true;
+              sel.appendChild(o);
+            }
+            sel.addEventListener("change", () => {
+              const o = readJsonObject(setKey);
+              o[s.key] = sel.value;
+              writeJson(setKey, o);
+            });
+            line.appendChild(sel);
+          }
+          if (s.help) {
+            const h = doc.createElement("small");
+            h.className = "rs-fhelp full";
+            h.textContent = s.help;
+            line.appendChild(h);
+          }
+          setBox.appendChild(line);
+        }
+        const setNote = doc.createElement("small");
+        setNote.className = "rs-fhelp full";
+        setNote.textContent =
+          "Ayarlar anında kaydedilir (rs:set); eklenti değeri kullandığı anda okur.";
+        setBox.appendChild(setNote);
+        dIn.appendChild(setBox);
+      }
       detail.appendChild(dIn);
       chev.addEventListener("click", () => {
         const open = detail.classList.toggle("open");
@@ -1287,12 +1729,129 @@ function makePanelModule(win, api, registry) {
       });
       const tails = doc.createElement("div");
       tails.className = "rs-tails";
-      tails.append(chev, toggle);
-      wrap.appendChild(row(p.id, state, tails));
+      tails.appendChild(chev);
+      if (p.custom) {
+        tails.appendChild(
+          pillBtn(
+            "Sil",
+            () => {
+              writeJson(
+                "rs:customPlugins",
+                readJsonList("rs:customPlugins").filter((x) => x && x.id !== p.id)
+              );
+              try {
+                registry.remove("plugin:" + p.id);
+              } catch (_) {}
+              fill(card);
+            },
+            true
+          )
+        );
+      }
+      tails.appendChild(toggle);
+      wrap.appendChild(row(p.id, sub, tails));
       wrap.appendChild(detail);
       s2.appendChild(wrap);
     }
     if (plugs.length) s2.appendChild(note("Plugin açma/kapama bir sonraki açılışta geçerlidir."));
+
+    // -- Plugin ekle formu (özel eklenti: tarayıcıda saklanır) --
+    const pform = doc.createElement("div");
+    pform.className = "rs-form";
+    pform.hidden = true;
+    const pfId = textInput("ornek-eklenti");
+    const pfName = textInput("Özel Eklenti");
+    const pfDesc = textInput("Tek cümle: ne yapar");
+    const pfUi = doc.createElement("input");
+    pfUi.type = "checkbox";
+    pfUi.checked = true;
+    const pfSet = doc.createElement("input");
+    pfSet.type = "checkbox";
+    const pfCode = textArea(
+      "// ReverseSpotify eklentisi — ReverseSpotify = facade (UI/log/onReady/getSetting)\nReverseSpotify.onReady(function () {\n  ReverseSpotify.log(\"merhaba\");\n});",
+      8
+    );
+    const perr = errLine();
+    const mkPerm = (input, text) => {
+      const l = doc.createElement("label");
+      l.className = "rs-permlbl";
+      const t = doc.createElement("span");
+      t.textContent = text;
+      l.append(input, t);
+      return l;
+    };
+    const permBox = doc.createElement("div");
+    permBox.className = "rs-perm";
+    permBox.append(mkPerm(pfUi, "ui (arayüz)"), mkPerm(pfSet, "settings (ayar kaydı)"));
+    pform.append(
+      field("Kimlik", pfId, "a-z, 0-9, tire; kurulu eklentilerle çakışmamalı."),
+      field("Ad", pfName),
+      field("Açıklama", pfDesc, "Panelde eklenti satırında her zaman görünür."),
+      field("İzinler", permBox, "ui: stiller/modal · settings: getSetting/setSetting kalıcılığı."),
+      field("JavaScript kodu", pfCode, "Kaydederken sözdizimi + hız kontrolü yapılır; tam lint kurulumda."),
+      perr
+    );
+    pform.appendChild(
+      pillBtn("Eklentiyi oluştur", () => {
+        perr.textContent = "";
+        const id = pfId.value.trim().toLowerCase();
+        const nm = pfName.value.trim();
+        const ds = pfDesc.value.trim();
+        const code = pfCode.value;
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+          perr.textContent = "Geçerli kimlik girin: a-z, 0-9, tire.";
+          return;
+        }
+        if (installedIds.has(id) || customPlugs.some((c) => c.id === id)) {
+          perr.textContent = "Bu kimlik zaten kullanımda.";
+          return;
+        }
+        if (!nm) {
+          perr.textContent = "Ad boş olamaz.";
+          return;
+        }
+        if (!code.trim()) {
+          perr.textContent = "Kod boş olamaz.";
+          return;
+        }
+        try {
+          new Function("ReverseSpotify", code);
+        } catch (e) {
+          perr.textContent = "Sözdizimi hatası: " + e.message;
+          return;
+        }
+        const im = /setInterval\s*\(.*?,\s*(\d+)\s*\)/s.exec(code);
+        if (im && Number(im[1]) < 100) {
+          perr.textContent = "setInterval aralığı 100 ms altı — performans kuralı ihlali.";
+          return;
+        }
+        const perms = [];
+        if (pfUi.checked) perms.push("ui");
+        if (pfSet.checked) perms.push("settings");
+        if (!perms.length) perms.push("ui");
+        const next = customPlugs.concat([
+          {
+            id,
+            name: nm,
+            description: ds,
+            permissions: perms,
+            perfClass: "light",
+            code,
+          },
+        ]);
+        if (!writeJson("rs:customPlugins", next)) {
+          perr.textContent = "Kayıt başarısız — depolama dolu olabilir.";
+          return;
+        }
+        fill(card);
+      })
+    );
+    s2.appendChild(
+      pillBtn("Plugin ekle", () => {
+        pform.hidden = !pform.hidden;
+      })
+    );
+    s2.appendChild(pform);
     panes.eklenti.appendChild(s2);
 
     // ---- Reklam ve UI temizliği ----

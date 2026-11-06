@@ -128,12 +128,21 @@ def _repack(apps: Path, set_theme=_UNSET, set_plugins=_UNSET, cfg_update=_UNSET)
         "site": config.SITE_URL,
         "author": config.AUTHOR_URL,
     }
-    # eski entry'lerde eksik repo alanını tamamla (panelde depo linki)
+    # eski entry'lerde eksik alanları tamamla (panel: depo linki + ad/sınıf/açıklama/ayarlar;
+    # manifest tek kaynak — config mutation değil meta taşır)
+    repo_metas = {m["id"]: m for m in plugins_cmd.list_repo_plugins()}
     for entry_p in cfg["plugins"]:
-        if isinstance(entry_p, dict) and entry_p.get("id") and not entry_p.get("repo"):
+        if not (isinstance(entry_p, dict) and entry_p.get("id")):
+            continue
+        if not entry_p.get("repo"):
             url = plugins_cmd.registry_url(entry_p["id"])
             if url:
                 entry_p["repo"] = url
+        m = repo_metas.get(entry_p["id"])
+        if m:
+            for k in ("name", "perfClass", "description", "settings"):
+                if k in m:
+                    entry_p[k] = m[k]
     entries["reverse/config.json"] = json.dumps(cfg).encode("utf-8")
 
     # plugin girişlerini paketle (config'teki id/entry üzerinden); bayatları at

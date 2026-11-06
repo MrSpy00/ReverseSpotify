@@ -4,5 +4,6 @@
   "version": "1.0.0",
   "entry": "index.js",
   "permissions": ["ui"],
-  "perfClass": "light"
+  "perfClass": "light",
+  "description": "Basılan tuşu sağ altta 350ms boyunca büyük harfle gösterir — yazarken hangi tuşa bastığınızı görürsünüz."
 }

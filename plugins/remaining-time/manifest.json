@@ -3,6 +3,17 @@
   "name": "Remaining Time",
   "version": "1.0.0",
   "entry": "index.js",
-  "permissions": ["ui"],
-  "perfClass": "light"
+  "permissions": ["settings", "ui"],
+  "perfClass": "light",
+  "description": "Parçanın kalan süresini (-m:ss) oynatma çubuğu üzerinde canlı gösterir; konum ayarla değiştirilebilir.",
+  "settings": [
+    {
+      "key": "position",
+      "label": "Konum",
+      "type": "select",
+      "options": ["alt-orta", "sag-alt", "sol-alt", "ust-orta"],
+      "default": "alt-orta",
+      "help": "Kalan süre chip'inin ekranda görüneceği yer."
+    }
+  ]
 }

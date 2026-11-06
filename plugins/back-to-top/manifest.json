@@ -4,5 +4,6 @@
   "version": "1.0.0",
   "entry": "index.js",
   "permissions": ["ui"],
-  "perfClass": "light"
+  "perfClass": "light",
+  "description": "Sayfa 600px'ten fazla kaydırıldığında sağ altta yukarı-ok butonu belirir; tıklayınca sayfanın başına yumuşak kaydırma yapar."
 }

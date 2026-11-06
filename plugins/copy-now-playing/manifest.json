@@ -4,5 +4,6 @@
   "version": "1.0.0",
   "entry": "index.js",
   "permissions": ["ui"],
-  "perfClass": "light"
+  "perfClass": "light",
+  "description": "Ctrl+Alt+C ile çalan parçayı \"Sanatçı — Başlık\" biçiminde panoya kopyalar; sağ altta onay bildirimi gösterir."
 }
